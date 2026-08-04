@@ -10,6 +10,7 @@ def main():
 
     params = Parameters()
     params.lees_in(sys.argv[1])
+    print(params)
 
 if __name__ == "__main__":
     main()

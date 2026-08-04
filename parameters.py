@@ -4,9 +4,9 @@ from copy import deepcopy
 
 class ReservoirParameters:
     def __init__(self):
-        self.opp = -1
-        self.c = -1
-        self.h_init = -1
+        self.opp: float | int | None = None
+        self.c: float | int | None = None
+        self.h_init: float | int | None = None
     def set_opp(self, opp):
         self.opp = opp
     def set_c(self, c):
@@ -14,11 +14,18 @@ class ReservoirParameters:
     def set_h_init(self, h_init):
         self.h_init = h_init
 
+    def __str__(self):
+        return (
+            f"opp={"None" if self.opp is None else f"{self.opp:.0f}"}, "
+            f"c={"None" if self.c is None else f"{self.c:.1f}"}, "
+            f"h_init={"None" if self.h_init is None else f"{self.h_init:.1f}"}"
+        )
+
 class BassinParameters:
     def __init__(self):
-        self.opp = -1
-        self.h_cur = -1
-        self.h_max = -1
+        self.opp: float | int | None = None
+        self.h_cur: float | int | None = None
+        self.h_max: float | int | None = None
     def set_opp(self, opp):
         self.opp = opp
     def set_h_cur(self, h_cur):
@@ -26,11 +33,18 @@ class BassinParameters:
     def set_h_max(self, h_max):
         self.h_max = h_max
 
+    def __str__(self):
+        return (
+            f"opp={"None" if self.opp is None else f"{self.opp:.0f}"}, "
+            f"h_cur={"None" if self.h_cur is None else f"{self.h_cur:.1f}"}, "
+            f"h_max={"None" if self.h_max is None else f"{self.h_max:.1f}"}"
+        )
+
 class StuwParameters:
     def __init__(self):
-        self.b = -1 # breedte
-        self.c = -1
-        self.h_kruin = -1
+        self.b: float | int | None = None # breedte
+        self.c: float | int | None = None
+        self.h_kruin: float | int | None = None
     def set_b(self, b):
         self.b = b
     def set_c(self, c):
@@ -38,17 +52,31 @@ class StuwParameters:
     def set_h_kruin(self, h_kruin):
         self.h_kruin = h_kruin
 
+    def __str__(self):
+        return (
+            f"b={"None" if self.b is None else f"{self.b:.1f}"}, "
+            f"c={"None" if self.c is None else f"{self.c:.1f}"}, "
+            f"h_kruin={"None" if self.h_kruin is None else f"{self.h_kruin:.1f}"}"
+        )
+
 class PompParameters:
     def __init__(self):
-        self.q_max = -1
-        self.h_aan = -1
-        self.h_uit = -1
+        self.q_max: float | int | None = None
+        self.h_aan: float | int | None = None
+        self.h_uit: float | int | None = None
     def set_q_max(self, q_max):
         self.q_max = q_max
     def set_h_aan(self, h_aan):
         self.h_aan = h_aan
     def set_h_uit(self, h_uit):
         self.h_uit = h_uit
+
+    def __str__(self):
+        return (
+            f"q_max={"None" if self.q_max is None else f"{self.q_max:.1f}"}, "
+            f"h_aan={"None" if self.h_aan is None else f"{self.h_aan:.2f}"}, "
+            f"h_uit={"None" if self.h_uit is None else f"{self.h_uit:.2f}"}"
+        )
 
 class GebiedParameters:
     def __init__(self):
@@ -137,6 +165,18 @@ class GebiedParameters:
         self.pomp_params = pomp_params
         self.met_pomp = bool(gebied_params_raw["stuw_pomp"]["met_pomp"])
 
+    def __str__(self):
+        return "\n".join([
+            f"  onverhard:  {self.onverhard_params}",
+            f"  glas NRL:   {self.glasNRL_params}",
+            f"  glas RL:    {self.glasRL_params}",
+            f"  openwater:  {self.openwater_params}",
+            f"  bassin NRL: {self.bassinNRL_params}",
+            f"  bassin RL:  {self.bassinRL_params}",
+            f"  stuw:       {self.stuw_params}{"" if not self.met_pomp else " (niet in gebruik)"}",
+            f"  pomp:       {self.pomp_params}{"" if self.met_pomp else " (niet in gebruik)"}",
+            f"  met pomp:   {self.met_pomp}",
+        ])
 
 class Parameters:
     def __init__(self):
@@ -179,4 +219,27 @@ class Parameters:
                 raise ValueError(f"De totale weging vanuit gebied {van} is <= 0.")
             verbindingen_map[van] = [(naar, w / tot) for naar, w in verbindingen]
         self.verbindingen_map = verbindingen_map
-        print(verbindingen_map)
+
+    def __str__(self):
+        verbindingen_tekst = ", ".join(
+            f"{van} -> {naar} ({weging:.2f})"
+            for van, verbindingen in self.verbindingen_map.items()
+            for naar, weging in verbindingen
+        )
+
+        regels = [
+            "",
+            "Parameters",
+            f"Aantal gebieden: {self.n_gebieden}",
+            f"Overschrijdingsmarge: {"None" if self.overschrijdingsmarge is None else f"{self.overschrijdingsmarge:.2f}"}",
+            f"Verbindingen: {verbindingen_tekst}",
+        ]
+
+        for gebied_id, gebied in enumerate(self.gebied_params):
+            regels.extend([
+                "",
+                f"Gebied {gebied_id}:",
+                str(gebied),
+            ])
+
+        return "\n".join(regels)
