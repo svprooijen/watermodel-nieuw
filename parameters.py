@@ -86,9 +86,19 @@ class GebiedParameters:
         self.openwater_params: ReservoirParameters | None = None
         self.bassinNRL_params: BassinParameters | None = None
         self.bassinRL_params: BassinParameters | None = None
-        self.stuw_params: StuwParameters | None = None
+        self.stuw_params: list[StuwParameters] = []
         self.pomp_params: PompParameters | None = None
-        self.met_pomp: bool | None = None
+        self.c_stuw: float | int | None = None
+        self.h_kruin_stuw: float | int | None = None
+
+    def stel_stuwen_in(self, stuwbreedtes: list[float | int]):
+        self.stuw_params = []
+        for breedte in stuwbreedtes:
+            stuw_params = StuwParameters()
+            stuw_params.set_b(breedte)
+            stuw_params.set_c(self.c_stuw)
+            stuw_params.set_h_kruin(self.h_kruin_stuw)
+            self.stuw_params.append(stuw_params)
 
     def set_overig(self, bassinNRL_params: BassinParameters,
                          bassinRL_params: BassinParameters,
@@ -136,11 +146,6 @@ class GebiedParameters:
         bassinRL_params.set_h_cur(gebied_params_raw["bassinRL"]["h_cur"])
         bassinRL_params.set_h_max(gebied_params_raw["bassinRL"]["h_max"])
 
-        stuw_params = StuwParameters()
-        stuw_params.set_b(gebied_params_raw["stuw_pomp"]["b_stuw"])
-        stuw_params.set_c(gebied_params_raw["stuw_pomp"]["c_stuw"])
-        stuw_params.set_h_kruin(gebied_params_raw["stuw_pomp"]["h_kruin_stuw"])
-
         pomp_params = PompParameters()
         pomp_params.set_h_aan(gebied_params_raw["stuw_pomp"]["h_aan_pomp"])
         pomp_params.set_h_uit(gebied_params_raw["stuw_pomp"]["h_uit_pomp"])
@@ -161,22 +166,26 @@ class GebiedParameters:
         self.openwater_params = openwater_params
         self.bassinNRL_params = bassinNRL_params
         self.bassinRL_params = bassinRL_params
-        self.stuw_params = stuw_params
         self.pomp_params = pomp_params
-        self.met_pomp = bool(gebied_params_raw["stuw_pomp"]["met_pomp"])
+        self._c_stuw = gebied_params_raw["stuw_pomp"]["c_stuw"]
+        self._h_kruin_stuw = gebied_params_raw["stuw_pomp"]["h_kruin_stuw"]
 
     def __str__(self):
-        return "\n".join([
-            f"  onverhard:  {self.onverhard_params}",
-            f"  glas NRL:   {self.glasNRL_params}",
-            f"  glas RL:    {self.glasRL_params}",
-            f"  openwater:  {self.openwater_params}",
-            f"  bassin NRL: {self.bassinNRL_params}",
-            f"  bassin RL:  {self.bassinRL_params}",
-            f"  stuw:       {self.stuw_params}{"" if not self.met_pomp else " (niet in gebruik)"}",
-            f"  pomp:       {self.pomp_params}{"" if self.met_pomp else " (niet in gebruik)"}",
-            f"  met pomp:   {self.met_pomp}",
-        ])
+        regels = [
+            f"  onverhard:\t{self.onverhard_params}",
+            f"  glas NRL:\t{self.glasNRL_params}",
+            f"  glas RL:\t{self.glasRL_params}",
+            f"  openwater:\t{self.openwater_params}",
+            f"  bassin NRL:\t{self.bassinNRL_params}",
+            f"  bassin RL:\t{self.bassinRL_params}",
+        ]
+        regels.extend(
+            f"  stuw {stuw_id}:\t{stuw_params}"
+            for stuw_id, stuw_params in enumerate(self.stuw_params)
+        )
+        if self.pomp_params is not None:
+            regels.append(f"  pomp: \t{self.pomp_params}")
+        return "\n".join(regels)
 
 class Parameters:
     def __init__(self):
@@ -210,21 +219,20 @@ class Parameters:
         verbindingen_map: dict[int, list[tuple[int, float | int]]] = {
             gebied_id: [] for gebied_id in range(len(gebied_params))
         }
-        for van, naar, weging in config["verbindingen"]:
-            verbindingen_map[van].append((naar, weging))
-        # normaliseer
-        for van, verbindingen in verbindingen_map.items():
-            tot = sum(w for _,w in verbindingen)
-            if tot <= 0 and verbindingen:
-                raise ValueError(f"De totale weging vanuit gebied {van} is <= 0.")
-            verbindingen_map[van] = [(naar, w / tot) for naar, w in verbindingen]
+        for verbinding in config["verbindingen"]:
+            van = verbinding["van"]
+            naar = verbinding["naar"]
+            verbindingen_map[van].append((naar, verbinding["b_stuw"]))
+
+        for gebied_id, params in enumerate(gebied_params):
+            params.stel_stuwen_in([stuwbreedte for _, stuwbreedte in verbindingen_map[gebied_id]])
         self.verbindingen_map = verbindingen_map
 
     def __str__(self):
         verbindingen_tekst = ", ".join(
-            f"{van} -> {naar} ({weging:.2f})"
+            f"{van} -> {naar} (stuw_b {stuw.b:.2f})"
             for van, verbindingen in self.verbindingen_map.items()
-            for naar, weging in verbindingen
+            for (naar, _), stuw in zip(verbindingen, self.gebied_params[van].stuw_params)
         )
 
         regels = [
