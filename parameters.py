@@ -1,12 +1,14 @@
 import yaml
 from typing import List
 from copy import deepcopy
+import numpy as np
+import numpy.typing as npt
 
 class ReservoirParameters:
     def __init__(self):
-        self.opp: float | int | None = None
+        self.opp: float | int = 0
         self.c: float | int | None = None
-        self.h_init: float | int | None = None
+        self.h_init: float | int = 0
     def set_opp(self, opp):
         self.opp = opp
     def set_c(self, c):
@@ -24,27 +26,27 @@ class ReservoirParameters:
 class BassinParameters:
     def __init__(self):
         self.opp: float | int | None = None
-        self.h_cur: float | int | None = None
+        self.h_init: float | int = 0
         self.h_max: float | int | None = None
     def set_opp(self, opp):
         self.opp = opp
-    def set_h_cur(self, h_cur):
-        self.h_cur = h_cur
+    def set_h_init(self, h_init):
+        self.h_init = h_init
     def set_h_max(self, h_max):
         self.h_max = h_max
 
     def __str__(self):
         return (
             f"opp={"None" if self.opp is None else f"{self.opp:.0f}"}, "
-            f"h_cur={"None" if self.h_cur is None else f"{self.h_cur:.1f}"}, "
+            f"h_init={"None" if self.h_init is None else f"{self.h_init:.1f}"}, "
             f"h_max={"None" if self.h_max is None else f"{self.h_max:.1f}"}"
         )
 
 class StuwParameters:
     def __init__(self):
-        self.b: float | int | None = None # breedte
+        self.b: float | int = 0 # breedte
         self.c: float | int | None = None
-        self.h_kruin: float | int | None = None
+        self.h_kruin: float | int = 0
     def set_b(self, b):
         self.b = b
     def set_c(self, c):
@@ -80,25 +82,26 @@ class PompParameters:
 
 class GebiedParameters:
     def __init__(self):
-        self.onverhard_params: ReservoirParameters | None = None
-        self.glasNRL_params: ReservoirParameters | None = None
-        self.glasRL_params: ReservoirParameters | None = None
-        self.openwater_params: ReservoirParameters | None = None
-        self.bassinNRL_params: BassinParameters | None = None
-        self.bassinRL_params: BassinParameters | None = None
+        self.onverhard_params: ReservoirParameters = ReservoirParameters()
+        self.glasNRL_params: ReservoirParameters = ReservoirParameters()
+        self.glasRL_params: ReservoirParameters = ReservoirParameters()
+        self.openwater_params: ReservoirParameters = ReservoirParameters()
+        self.bassinNRL_params: BassinParameters = BassinParameters()
+        self.bassinRL_params: BassinParameters = BassinParameters()
         self.stuw_params: list[StuwParameters] = []
         self.pomp_params: PompParameters | None = None
         self.c_stuw: float | int | None = None
-        self.h_kruin_stuw: float | int | None = None
 
-    def stel_stuwen_in(self, stuwbreedtes: list[float | int]):
+    def stel_stuwen_in(self, stuwen: list[tuple[float | int, float | int]]):
         self.stuw_params = []
-        for breedte in stuwbreedtes:
-            stuw_params = StuwParameters()
-            stuw_params.set_b(breedte)
-            stuw_params.set_c(self.c_stuw)
-            stuw_params.set_h_kruin(self.h_kruin_stuw)
-            self.stuw_params.append(stuw_params)
+        if stuwen:
+            self.pomp_params = None
+            for breedte, hoogte in stuwen:
+                stuw_params = StuwParameters()
+                stuw_params.set_b(breedte)
+                stuw_params.set_c(self.c_stuw)
+                stuw_params.set_h_kruin(hoogte)
+                self.stuw_params.append(stuw_params)
 
     def set_overig(self, bassinNRL_params: BassinParameters,
                          bassinRL_params: BassinParameters,
@@ -118,7 +121,7 @@ class GebiedParameters:
         q_max = opp_tot * gemaal_cap_m_per_u
         pomp_params.set_q_max(q_max)
 
-    def convert_raw_to_object(self, gebied_params_raw):
+    def converteer_ruw_naar_object(self, gebied_params_raw):
         onverhard_params = ReservoirParameters()
         onverhard_params.set_opp(gebied_params_raw["onverhard"]["opp"])
         onverhard_params.set_c(gebied_params_raw["onverhard"]["c"])
@@ -139,11 +142,11 @@ class GebiedParameters:
         openwater_params.set_h_init(gebied_params_raw["openwater"]["h_init"])
 
         bassinNRL_params = BassinParameters()
-        bassinNRL_params.set_h_cur(gebied_params_raw["bassinNRL"]["h_cur"])
+        bassinNRL_params.set_h_init(gebied_params_raw["bassinNRL"]["h_init"])
         bassinNRL_params.set_h_max(gebied_params_raw["bassinNRL"]["h_max"])
 
         bassinRL_params = BassinParameters()
-        bassinRL_params.set_h_cur(gebied_params_raw["bassinRL"]["h_cur"])
+        bassinRL_params.set_h_init(gebied_params_raw["bassinRL"]["h_init"])
         bassinRL_params.set_h_max(gebied_params_raw["bassinRL"]["h_max"])
 
         pomp_params = PompParameters()
@@ -167,8 +170,7 @@ class GebiedParameters:
         self.bassinNRL_params = bassinNRL_params
         self.bassinRL_params = bassinRL_params
         self.pomp_params = pomp_params
-        self._c_stuw = gebied_params_raw["stuw_pomp"]["c_stuw"]
-        self._h_kruin_stuw = gebied_params_raw["stuw_pomp"]["h_kruin_stuw"]
+        self.c_stuw = gebied_params_raw["stuw_pomp"]["c_stuw"]
 
     def __str__(self):
         regels = [
@@ -190,9 +192,11 @@ class GebiedParameters:
 class Parameters:
     def __init__(self):
         self.n_gebieden: int = 0
-        self.gebied_params: list[GebiedParameters] | None = None
-        self.verbindingen_map: dict[int, list[tuple[int, float | int]]] | None = None
+        self.gebied_params: list[GebiedParameters] = []
+        self.verbindingen_map: dict[int, list[tuple[int, float | int, float | int]]] = {}
         self.overschrijdingsmarge: float | int | None = None
+        self.voormalen_aan: bool = False
+        self.rainleveler_aan: bool = False
 
     def lees_in(self, bestandsnaam):
         with open(bestandsnaam) as f:
@@ -207,32 +211,37 @@ class Parameters:
                 params_raw[categorie].update(wijzigingen)
 
             params = GebiedParameters()
-            params.convert_raw_to_object(params_raw)
+            params.converteer_ruw_naar_object(params_raw)
             gebied_params.append(params)
         self.gebied_params = gebied_params
         self.n_gebieden = len(gebied_params)
 
         # extra
         self.overschrijdingsmarge = config["extra"]["overschrijdingsmarge"]
+        self.voormalen_aan = bool(config["extra"]["voormalen_aan"])
+        self.rainleveler_aan = bool(config["extra"]["rainleveler_aan"])
 
         # verbindingen tussen gebieden
-        verbindingen_map: dict[int, list[tuple[int, float | int]]] = {
+        verbindingen_map: dict[int, list[tuple[int, float | int, float | int]]] = {
             gebied_id: [] for gebied_id in range(len(gebied_params))
         }
         for verbinding in config["verbindingen"]:
             van = verbinding["van"]
             naar = verbinding["naar"]
-            verbindingen_map[van].append((naar, verbinding["b_stuw"]))
-
+            verbindingen_map[van].append((naar, verbinding["b_stuw"], verbinding["h_kruin_stuw"]))
+        # zet hoogte en breedte van stuwen in self.stuw_params
         for gebied_id, params in enumerate(gebied_params):
-            params.stel_stuwen_in([stuwbreedte for _, stuwbreedte in verbindingen_map[gebied_id]])
+            stuwen = [
+                (breedte, kruinhoogte) for _, breedte, kruinhoogte in verbindingen_map[gebied_id]
+            ]
+            params.stel_stuwen_in(stuwen)
         self.verbindingen_map = verbindingen_map
 
     def __str__(self):
-        verbindingen_tekst = ", ".join(
-            f"{van} -> {naar} (stuw_b {stuw.b:.2f})"
+        verbindingen_tekst = "\n\t\t".join(
+            f"{van} -> {naar} (stuw_b {stuw.b:.1f}, stuw_h_kruin {stuw.h_kruin:.1f})"
             for van, verbindingen in self.verbindingen_map.items()
-            for (naar, _), stuw in zip(verbindingen, self.gebied_params[van].stuw_params)
+            for (naar, _, _), stuw in zip(verbindingen, self.gebied_params[van].stuw_params)
         )
 
         regels = [
@@ -240,7 +249,7 @@ class Parameters:
             "Parameters",
             f"Aantal gebieden: {self.n_gebieden}",
             f"Overschrijdingsmarge: {"None" if self.overschrijdingsmarge is None else f"{self.overschrijdingsmarge:.2f}"}",
-            f"Verbindingen: {verbindingen_tekst}",
+            f"Verbindingen:\t{verbindingen_tekst}",
         ]
 
         for gebied_id, gebied in enumerate(self.gebied_params):
@@ -251,3 +260,25 @@ class Parameters:
             ])
 
         return "\n".join(regels)
+
+class ReservoirToestand:
+    def __init__(self, h_init: float | int):
+        self.h: float | int = h_init
+        self.h_arr: list[float | int] = [self.h]
+        self.q_in_arr: list[float | int] = [0.0]
+        self.q_uit_arr: list[float | int] = [0.0]
+
+class BassinToestand:
+    def __init__(self, h: float | int):
+        self.h: float | int = h
+        self.h_arr: list[float | int] = [self.h]
+
+class GebiedToestand:
+    def __init__(self, params: GebiedParameters):
+        self.onverhard: ReservoirToestand = ReservoirToestand(params.onverhard_params.h_init)
+        self.glasNRL: ReservoirToestand = ReservoirToestand(params.glasNRL_params.h_init)
+        self.glasRL: ReservoirToestand = ReservoirToestand(params.glasRL_params.h_init)
+        self.openwater: ReservoirToestand = ReservoirToestand(params.openwater_params.h_init)
+        self.bassinNRL: BassinToestand = BassinToestand(params.bassinNRL_params.h_init)
+        self.bassinRL: BassinToestand = BassinToestand(params.bassinRL_params.h_init)
+        self.vm_resterend = 0.0
