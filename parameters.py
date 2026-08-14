@@ -25,15 +25,18 @@ class ReservoirParameters:
 
 class BassinParameters:
     def __init__(self):
-        self.opp: float | int | None = None
+        self.opp: float | int = 0
         self.h_init: float | int = 0
         self.h_max: float | int | None = None
+        self.q_klep_max: float | int | None = None
     def set_opp(self, opp):
         self.opp = opp
     def set_h_init(self, h_init):
         self.h_init = h_init
     def set_h_max(self, h_max):
         self.h_max = h_max
+    def set_q_klep_max(self, q_klep_max):
+        self.q_klep_max = q_klep_max
 
     def __str__(self):
         return (
@@ -152,6 +155,8 @@ class GebiedParameters:
         pomp_params = PompParameters()
         pomp_params.set_h_aan(gebied_params_raw["stuw_pomp"]["h_aan_pomp"])
         pomp_params.set_h_uit(gebied_params_raw["stuw_pomp"]["h_uit_pomp"])
+        if pomp_params.h_uit >= pomp_params.h_aan:
+            raise ValueError("h_uit_pomp moet kleiner dan h_aan_pomp zijn.")
 
         gemaal_cap = gebied_params_raw["stuw_pomp"]["gemaal_cap"]
         opp_tot = onverhard_params.opp + glasNRL_params.opp + glasRL_params.opp + openwater_params.opp
@@ -162,6 +167,7 @@ class GebiedParameters:
                         pomp_params,
                         opp_tot,
                         gemaal_cap)
+        bassinRL_params.set_q_klep_max(gebied_params_raw["bassinRL"]["dh_klep_max"] * bassinRL_params.opp)
 
         self.onverhard_params = onverhard_params
         self.glasNRL_params = glasNRL_params
@@ -197,6 +203,7 @@ class Parameters:
         self.overschrijdingsmarge: float | int | None = None
         self.voormalen_aan: bool = False
         self.rainleveler_aan: bool = False
+        self.rainleveler_respons: float = 0.0
 
     def lees_in(self, bestandsnaam):
         with open(bestandsnaam) as f:
@@ -220,6 +227,9 @@ class Parameters:
         self.overschrijdingsmarge = config["extra"]["overschrijdingsmarge"]
         self.voormalen_aan = bool(config["extra"]["voormalen_aan"])
         self.rainleveler_aan = bool(config["extra"]["rainleveler_aan"])
+        self.rainleveler_respons = float(config["extra"]["rainleveler_respons"])
+        if self.rainleveler_respons < 0.0:
+            raise ValueError("rainleveler_respons mag niet negatief zijn")
 
         # verbindingen tussen gebieden
         verbindingen_map: dict[int, list[tuple[int, float | int, float | int]]] = {
@@ -269,9 +279,13 @@ class ReservoirToestand:
         self.q_uit_arr: list[float | int] = [0.0]
 
 class BassinToestand:
-    def __init__(self, h: float | int):
+    def __init__(self, h: float | int, is_RL: bool):
         self.h: float | int = h
         self.h_arr: list[float | int] = [self.h]
+        self.is_RL: bool = is_RL
+        self.klep_open: bool = False
+        self.water_geloosd: bool = False
+        self.te_lozen: float = 0.0
 
 class GebiedToestand:
     def __init__(self, params: GebiedParameters):
@@ -279,6 +293,7 @@ class GebiedToestand:
         self.glasNRL: ReservoirToestand = ReservoirToestand(params.glasNRL_params.h_init)
         self.glasRL: ReservoirToestand = ReservoirToestand(params.glasRL_params.h_init)
         self.openwater: ReservoirToestand = ReservoirToestand(params.openwater_params.h_init)
-        self.bassinNRL: BassinToestand = BassinToestand(params.bassinNRL_params.h_init)
-        self.bassinRL: BassinToestand = BassinToestand(params.bassinRL_params.h_init)
+        self.bassinNRL: BassinToestand = BassinToestand(params.bassinNRL_params.h_init, is_RL=False)
+        self.bassinRL: BassinToestand = BassinToestand(params.bassinRL_params.h_init, is_RL=True)
+        self.pomp_aan: bool = False
         self.vm_resterend = 0.0

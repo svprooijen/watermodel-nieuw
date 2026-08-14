@@ -18,32 +18,39 @@ defaults:
     h_init: 0.0
     h_max: 0.1
   bassinRL:
-    h_init: 0.0
+    h_init: 0.05
     h_max: 0.1
+    dh_klep_max: 0.0067
   stuw_pomp:
     c_stuw: 1.7
-    h_aan_pomp: -0.05
-    h_uit_pomp: 0.05
-    gemaal_cap: 19 # mm/dag
+    h_aan_pomp: 0.05
+    h_uit_pomp: -0.05
+    gemaal_cap: 45 # mm/dag
 
 extra:
   overschrijdingsmarge: 0.3
-  rainleveler_aan: 0
+  rainleveler_aan: 1
+  rainleveler_respons: 12
   voormalen_aan: 0
 
 # Overschrijf default parameters in specifieke gebieden, - {} voor default gebied
 gebieden:
   - openwater:
-      h_init: 1.6
+      h_init: 0.6
   - openwater:
       h_init: 0.7
   - openwater:
       h_init: 0.8
-  - {}
-  - {}
-  - {}
-  - {}
-  - {}
+  - openwater:
+      h_init: 1.0
+  - openwater:
+      h_init: 0.5
+  - openwater:
+      h_init: 0.2
+  - openwater:
+      h_init: 1.1
+  - openwater:
+      h_init: 0.0
 
 # Per gebied per uitgaande verbindingen één stuw. Specificeer extra stuwbreedte.
 # Een gebied zonder uitgaande verbindingen krijgt automatisch een pomp.
@@ -63,24 +70,24 @@ verbindingen:
   - van: 1
     naar: 2
     b_stuw: 1.5
-    h_kruin_stuw: 1.6
+    h_kruin_stuw: 1.2
   - van: 2
     naar: 7
     b_stuw: 1.5
-    h_kruin_stuw: 1.6
+    h_kruin_stuw: 0.8
   - van: 3
     naar: 7
     b_stuw: 1.5
-    h_kruin_stuw: 1.6
+    h_kruin_stuw: 1.1
   - van: 4
     naar: 5
     b_stuw: 1.5
-    h_kruin_stuw: 1.6
+    h_kruin_stuw: 0.7
   - van: 5
     naar: 7
     b_stuw: 1.5
-    h_kruin_stuw: 1.6
+    h_kruin_stuw: 0.3
   - van: 6
     naar: 7
     b_stuw: 1.5
-    h_kruin_stuw: 1.6
+    h_kruin_stuw: 1.1
