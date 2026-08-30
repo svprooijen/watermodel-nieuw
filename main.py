@@ -287,6 +287,8 @@ def main():
         ), None
     )
     rainleveler_start_u = (max(0.0, bui_start_u - params.rainleveler_respons) if bui_start_u is not None else None)
+    voormalen_start_u = (max(0.0, bui_start_u - params.voormalen_respons) if bui_start_u is not None else None)
+    voormalen_uitgevoerd = False
 
     # te lozen deel via RL is deel van totale neerslag op glasRL
     for gebied_params, toestand in zip(
@@ -309,6 +311,18 @@ def main():
                 bassin = toestand.bassinRL
                 if not bassin.water_geloosd and bassin.te_lozen > 0.0:
                     bassin.klep_open = True
+
+        if (not voormalen_uitgevoerd and params.voormalen_aan
+                and voormalen_start_u is not None and interval_start_u >= voormalen_start_u):
+            for gebied_params in params.gebied_params:
+                if gebied_params.pomp_params is not None:
+                    gebied_params.pomp_params.h_aan -= 0.1
+                    gebied_params.pomp_params.h_uit -= 0.1
+
+                if params.voormalen_aan == 2:
+                    for stuw_params in gebied_params.stuw_params:
+                        stuw_params.h_kruin -= 0.1
+            voormalen_uitgevoerd = True
 
         tijdstap(
             idx=idx,

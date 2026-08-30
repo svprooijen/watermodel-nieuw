@@ -1,37 +1,38 @@
 defaults:
   onverhard:
-    opp: 470000
+    opp: 470000 # m²
     c: 0.05
-    h_init: 0.0
+    h_init: 0.0 # m
   glasNRL:
-    opp: 270000
+    opp: 270000 # m²
     c: 0.6
-    h_init: 0.0
+    h_init: 0.0 # m
   glasRL:
-    opp: 200000
+    opp: 200000 # m²
     c: 0.5
-    h_init: 0.0
+    h_init: 0.0 # m
   openwater:
-    opp: 60000
-    h_init: 0.0
+    opp: 60000 # m²
+    h_init: 0.0 # m
   bassinNRL:
-    h_init: 0.0
-    h_max: 0.1
+    h_init: 0.0 # m
+    h_max: 0.1 # m
   bassinRL:
-    h_init: 0.05
-    h_max: 0.1
-    dh_klep_max: 0.0067
+    h_init: 0.05 # m
+    h_max: 0.1 # m
+    dh_klep_max: 0.0067 # m/u
   stuw_pomp:
     c_stuw: 1.7
-    h_aan_pomp: 0.05
-    h_uit_pomp: -0.05
-    gemaal_cap: 45 # mm/dag
+    h_aan_pomp: 0.05 # m
+    h_uit_pomp: -0.05 # m
+    gemaal_cap: 19 # mm/dag
 
 extra:
-  overschrijdingsmarge: 0.3
-  rainleveler_aan: 1
-  rainleveler_respons: 12
-  voormalen_aan: 0
+  overschrijdingsmarge: 0.3 # m
+  rainleveler_aan: 0 # 0-uit, 1-aan
+  rainleveler_respons: 12 # u
+  voormalen_aan: 0 # 0-uit, 1-verlaag peilen, 2-verlaag ook kruinhoogtes
+  voormalen_respons: 12 # u
 
 # Overschrijf default parameters in specifieke gebieden, - {} voor default gebied
 gebieden:
@@ -57,20 +58,20 @@ gebieden:
 verbindingen:
   - van: 0
     naar: 1
-    b_stuw: 2.0
-    h_kruin_stuw: 1.6
+    b_stuw: 2.0 # m
+    h_kruin_stuw: 0.6 # m
   - van: 0
     naar: 3
     b_stuw: 2.4
-    h_kruin_stuw: 0.8
+    h_kruin_stuw: 0.6
   - van: 0
     naar: 5
     b_stuw: 1.7
-    h_kruin_stuw: 0.7
+    h_kruin_stuw: 0.6
   - van: 1
     naar: 2
     b_stuw: 1.5
-    h_kruin_stuw: 1.2
+    h_kruin_stuw: 0.7
   - van: 2
     naar: 7
     b_stuw: 1.5
@@ -78,15 +79,15 @@ verbindingen:
   - van: 3
     naar: 7
     b_stuw: 1.5
-    h_kruin_stuw: 1.1
+    h_kruin_stuw: 1.0
   - van: 4
     naar: 5
     b_stuw: 1.5
-    h_kruin_stuw: 0.7
+    h_kruin_stuw: 0.5
   - van: 5
     naar: 7
     b_stuw: 1.5
-    h_kruin_stuw: 0.3
+    h_kruin_stuw: 0.2
   - van: 6
     naar: 7
     b_stuw: 1.5

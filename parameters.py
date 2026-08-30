@@ -1,8 +1,6 @@
 import yaml
 from typing import List
 from copy import deepcopy
-import numpy as np
-import numpy.typing as npt
 
 class ReservoirParameters:
     def __init__(self):
@@ -67,8 +65,8 @@ class StuwParameters:
 class PompParameters:
     def __init__(self):
         self.q_max: float | int | None = None
-        self.h_aan: float | int | None = None
-        self.h_uit: float | int | None = None
+        self.h_aan: float | int = 0
+        self.h_uit: float | int = 0
     def set_q_max(self, q_max):
         self.q_max = q_max
     def set_h_aan(self, h_aan):
@@ -201,9 +199,10 @@ class Parameters:
         self.gebied_params: list[GebiedParameters] = []
         self.verbindingen_map: dict[int, list[tuple[int, float | int, float | int]]] = {}
         self.overschrijdingsmarge: float | int | None = None
-        self.voormalen_aan: bool = False
         self.rainleveler_aan: bool = False
-        self.rainleveler_respons: float = 0.0
+        self.rainleveler_respons: float | int = 0.0
+        self.voormalen_aan: int = 0
+        self.voormalen_respons: float | int = 0.0
 
     def lees_in(self, bestandsnaam):
         with open(bestandsnaam) as f:
@@ -225,10 +224,13 @@ class Parameters:
 
         # extra
         self.overschrijdingsmarge = config["extra"]["overschrijdingsmarge"]
-        self.voormalen_aan = bool(config["extra"]["voormalen_aan"])
         self.rainleveler_aan = bool(config["extra"]["rainleveler_aan"])
         self.rainleveler_respons = float(config["extra"]["rainleveler_respons"])
-        if self.rainleveler_respons < 0.0:
+        self.voormalen_aan = int(config["extra"]["voormalen_aan"])
+        self.voormalen_respons = float(config["extra"]["voormalen_respons"])
+        if self.voormalen_aan not in (0, 1, 2):
+            raise ValueError("voormalen_aan moet 0, 1 of 2 zijn")
+        if self.rainleveler_respons < 0.0 or self.voormalen_respons < 0.0:
             raise ValueError("rainleveler_respons mag niet negatief zijn")
 
         # verbindingen tussen gebieden
