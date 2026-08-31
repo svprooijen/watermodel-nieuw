@@ -65,10 +65,13 @@ class StuwParameters:
 class PompParameters:
     def __init__(self):
         self.q_max: float | int | None = None
+        self.gemaal_cap: float | int | None = None
         self.h_aan: float | int = 0
         self.h_uit: float | int = 0
     def set_q_max(self, q_max):
         self.q_max = q_max
+    def set_gemaal_cap(self, gemaal_cap):
+        self.gemaal_cap = gemaal_cap
     def set_h_aan(self, h_aan):
         self.h_aan = h_aan
     def set_h_uit(self, h_uit):
@@ -117,12 +120,10 @@ class GebiedParameters:
         bassinRL_opp = bassinRL_grootte * glasRL_params.opp / bassinRL_params.h_max / 10000
         bassinNRL_params.set_opp(bassinNRL_opp)
         bassinRL_params.set_opp(bassinRL_opp)
+        pomp_params.set_gemaal_cap(gemaal_cap)
 
-        gemaal_cap_m_per_u = gemaal_cap / 1000 / 24
-        q_max = opp_tot * gemaal_cap_m_per_u
-        pomp_params.set_q_max(q_max)
 
-    def converteer_ruw_naar_object(self, gebied_params_raw):
+    def converteer_ruw_naar_object(self, gebied_params_raw, opp_tot: float | int):
         onverhard_params = ReservoirParameters()
         onverhard_params.set_opp(gebied_params_raw["onverhard"]["opp"])
         onverhard_params.set_c(gebied_params_raw["onverhard"]["c"])
@@ -156,8 +157,8 @@ class GebiedParameters:
         if pomp_params.h_uit >= pomp_params.h_aan:
             raise ValueError("h_uit_pomp moet kleiner dan h_aan_pomp zijn.")
 
+        opp_tot += onverhard_params.opp + glasNRL_params.opp + glasRL_params.opp + openwater_params.opp
         gemaal_cap = gebied_params_raw["stuw_pomp"]["gemaal_cap"]
-        opp_tot = onverhard_params.opp + glasNRL_params.opp + glasRL_params.opp + openwater_params.opp
         self.set_overig(bassinNRL_params,
                         bassinRL_params,
                         glasNRL_params,
@@ -166,7 +167,6 @@ class GebiedParameters:
                         opp_tot,
                         gemaal_cap)
         bassinRL_params.set_q_klep_max(gebied_params_raw["bassinRL"]["dh_klep_max"] * bassinRL_params.opp)
-
         self.onverhard_params = onverhard_params
         self.glasNRL_params = glasNRL_params
         self.glasRL_params = glasRL_params
@@ -175,6 +175,7 @@ class GebiedParameters:
         self.bassinRL_params = bassinRL_params
         self.pomp_params = pomp_params
         self.c_stuw = gebied_params_raw["stuw_pomp"]["c_stuw"]
+        return opp_tot
 
     def __str__(self):
         regels = [
@@ -211,14 +212,16 @@ class Parameters:
         # gebied parameters
         gebied_params: List[GebiedParameters] = []
         defaults = config["defaults"]
+        opp_tot = 0.0
         for gebied in config["gebieden"]:
             params_raw = deepcopy(defaults)
             for categorie, wijzigingen in gebied.items():
                 params_raw[categorie].update(wijzigingen)
 
             params = GebiedParameters()
-            params.converteer_ruw_naar_object(params_raw)
+            opp_tot = params.converteer_ruw_naar_object(params_raw, opp_tot)
             gebied_params.append(params)
+
         self.gebied_params = gebied_params
         self.n_gebieden = len(gebied_params)
 
@@ -247,6 +250,10 @@ class Parameters:
                 (breedte, kruinhoogte) for _, breedte, kruinhoogte in verbindingen_map[gebied_id]
             ]
             params.stel_stuwen_in(stuwen)
+            if params.pomp_params is not None:
+                gemaal_cap_m_per_u = params.pomp_params.gemaal_cap / 1000 / 24
+                q_max = opp_tot * gemaal_cap_m_per_u
+                params.pomp_params.set_q_max(q_max)
         self.verbindingen_map = verbindingen_map
 
     def __str__(self):
