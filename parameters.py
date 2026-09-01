@@ -144,12 +144,20 @@ class GebiedParameters:
         openwater_params.set_h_init(gebied_params_raw["openwater"]["h_init"])
 
         bassinNRL_params = BassinParameters()
-        bassinNRL_params.set_h_init(gebied_params_raw["bassinNRL"]["h_init"])
-        bassinNRL_params.set_h_max(gebied_params_raw["bassinNRL"]["h_max"])
+        bassinNRL_h_max = float(gebied_params_raw["bassinNRL"]["h_max"])
+        bassinNRL_beginruimte_m = float(gebied_params_raw["bassinNRL"]["h_init"]) / 1000.0
+        if not 0.0 <= bassinNRL_beginruimte_m <= bassinNRL_h_max:
+            raise ValueError("bassinNRL h_init moet tussen 0 en h_max liggen (in mm)")
+        bassinNRL_params.set_h_init(bassinNRL_h_max - bassinNRL_beginruimte_m)
+        bassinNRL_params.set_h_max(bassinNRL_h_max)
 
         bassinRL_params = BassinParameters()
-        bassinRL_params.set_h_init(gebied_params_raw["bassinRL"]["h_init"])
-        bassinRL_params.set_h_max(gebied_params_raw["bassinRL"]["h_max"])
+        bassinRL_h_max = float(gebied_params_raw["bassinRL"]["h_max"])
+        bassinRL_beginruimte_m = float(gebied_params_raw["bassinRL"]["h_init"]) / 1000.0
+        if not 0.0 <= bassinRL_beginruimte_m <= bassinRL_h_max:
+            raise ValueError("bassinRL h_init moet tussen 0 en h_max liggen (in mm)")
+        bassinRL_params.set_h_init(bassinRL_h_max - bassinRL_beginruimte_m)
+        bassinRL_params.set_h_max(bassinRL_h_max)
 
         pomp_params = PompParameters()
         pomp_params.set_h_aan(gebied_params_raw["stuw_pomp"]["h_aan_pomp"])

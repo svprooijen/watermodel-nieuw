@@ -15,10 +15,10 @@ defaults:
     opp: 50000 # m²
     h_init: 0.0 # m
   bassinNRL:
-    h_init: 0.0 # m
+    h_init: 100 # mm aan beginruimte
     h_max: 0.1 # m
   bassinRL:
-    h_init: 0.05 # m
+    h_init: 50 # mm
     h_max: 0.1 # m
     dh_klep_max: 0.0067 # m/u
   stuw_pomp:
