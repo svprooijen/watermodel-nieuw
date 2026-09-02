@@ -1,19 +1,20 @@
 defaults:
   onverhard:
-    opp: 1 # m²
+    opp: 500000 # m²
     c: 0.05
     h_init: 0.0 # m
   glasNRL:
-    opp: 500000 # m²
+    opp: 300000 # m²
     c: 0.6
     h_init: 0.0 # m
   glasRL:
-    opp: 450000 # m²
+    opp: 150000 # m²
     c: 0.5
     h_init: 0.0 # m
   openwater:
     opp: 50000 # m²
     h_init: 0.0 # m
+    h_streef: 0.0 # m; tevens de kruinhoogte van alle stuwen in het gebied
   bassinNRL:
     h_init: 100 # mm aan beginruimte
     h_max: 0.1 # m
@@ -37,21 +38,29 @@ extra:
 # Overschrijf default parameters in specifieke gebieden, - {} voor default gebied
 gebieden:
   - openwater:
-      h_init: 2.1
+      h_init: 1.9
+      h_streef: 2.1
   - openwater:
       h_init: 1.4
+      h_streef: 1.4
   - openwater:
       h_init: 0.7
+      h_streef: 0.7
   - openwater:
       h_init: 1.0
+      h_streef: 1.0
   - openwater:
       h_init: 1.7
+      h_streef: 1.7
   - openwater:
       h_init: 1.0
+      h_streef: 1.0
   - openwater:
       h_init: 0.7
+      h_streef: 0.7
   - openwater:
       h_init: 0.0
+      h_streef: 0.0
 
 # Per gebied per uitgaande verbindingen één stuw. Specificeer extra stuwbreedte.
 # Een gebied zonder uitgaande verbindingen krijgt automatisch een pomp.
@@ -59,36 +68,27 @@ verbindingen:
   - van: 0
     naar: 1
     b_stuw: 2.0 # m
-    h_kruin_stuw: 2.1 # m
   - van: 0
     naar: 3
     b_stuw: 2.4
-    h_kruin_stuw: 2.1
   - van: 0
     naar: 5
     b_stuw: 1.7
-    h_kruin_stuw: 2.1
   - van: 1
     naar: 2
     b_stuw: 1.5
-    h_kruin_stuw: 1.4
   - van: 2
     naar: 7
     b_stuw: 1.5
-    h_kruin_stuw: 0.7
   - van: 3
     naar: 7
     b_stuw: 1.5
-    h_kruin_stuw: 1.0
   - van: 4
     naar: 5
     b_stuw: 1.5
-    h_kruin_stuw: 1.7
   - van: 5
     naar: 7
     b_stuw: 1.5
-    h_kruin_stuw: 1.0
   - van: 6
     naar: 7
     b_stuw: 1.5
-    h_kruin_stuw: 0.7

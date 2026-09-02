@@ -7,12 +7,15 @@ class ReservoirParameters:
         self.opp: float | int = 0
         self.c: float | int | None = None
         self.h_init: float | int = 0
+        self.h_streef: float | int = 0
     def set_opp(self, opp):
         self.opp = opp
     def set_c(self, c):
         self.c = c
     def set_h_init(self, h_init):
         self.h_init = h_init
+    def set_h_streef(self, h_streef):
+        self.h_streef = h_streef
 
     def __str__(self):
         return (
@@ -47,19 +50,15 @@ class StuwParameters:
     def __init__(self):
         self.b: float | int = 0 # breedte
         self.c: float | int | None = None
-        self.h_kruin: float | int = 0
     def set_b(self, b):
         self.b = b
     def set_c(self, c):
         self.c = c
-    def set_h_kruin(self, h_kruin):
-        self.h_kruin = h_kruin
 
     def __str__(self):
         return (
             f"b={"None" if self.b is None else f"{self.b:.1f}"}, "
-            f"c={"None" if self.c is None else f"{self.c:.1f}"}, "
-            f"h_kruin={"None" if self.h_kruin is None else f"{self.h_kruin:.1f}"}"
+            f"c={"None" if self.c is None else f"{self.c:.1f}"}"
         )
 
 class PompParameters:
@@ -95,24 +94,35 @@ class GebiedParameters:
         self.stuw_params: list[StuwParameters] = []
         self.pomp_params: PompParameters | None = None
         self.c_stuw: float | int | None = None
+        self.opp_tot: float | int = 0
 
-    def stel_stuwen_in(self, stuwen: list[tuple[float | int, float | int]]):
+    def stel_stuwen_in(self, stuwbreedtes: list[float | int]):
         self.stuw_params = []
-        if stuwen:
+        if stuwbreedtes:
             self.pomp_params = None
-            for breedte, hoogte in stuwen:
+            for breedte in stuwbreedtes:
                 stuw_params = StuwParameters()
                 stuw_params.set_b(breedte)
                 stuw_params.set_c(self.c_stuw)
-                stuw_params.set_h_kruin(hoogte)
                 self.stuw_params.append(stuw_params)
+
+    def bereken_waterruimte_mm(self, bassinNRL_h: float | int,
+                                     bassinRL_h: float | int,
+                                     openwater_h: float | int,) -> list[float]:
+        nrl_ruimte_mm = max(0.0, self.bassinNRL_params.h_max - bassinNRL_h) * 1000.0
+        rl_ruimte_mm = max(0.0, self.bassinRL_params.h_max - bassinRL_h) * 1000.0
+        openwater_ruimte_mm = max(0.0, self.openwater_params.h_streef - openwater_h) * 1000.0
+        return [
+            nrl_ruimte_mm * self.glasNRL_params.opp / self.opp_tot,
+            rl_ruimte_mm * self.glasRL_params.opp / self.opp_tot,
+            openwater_ruimte_mm * self.openwater_params.opp / self.opp_tot,
+        ]
 
     def set_overig(self, bassinNRL_params: BassinParameters,
                          bassinRL_params: BassinParameters,
                          glasNRL_params: ReservoirParameters,
                          glasRL_params: ReservoirParameters,
                          pomp_params: PompParameters,
-                         opp_tot: float | int,
                          gemaal_cap: float | int):
         bassinNRL_grootte = 1000 # Aantal m^3 bassin per hectare -> gem. hoogte in mm/10
         bassinRL_grootte = 1000
@@ -142,6 +152,7 @@ class GebiedParameters:
         openwater_params = ReservoirParameters()
         openwater_params.set_opp(gebied_params_raw["openwater"]["opp"])
         openwater_params.set_h_init(gebied_params_raw["openwater"]["h_init"])
+        openwater_params.set_h_streef(gebied_params_raw["openwater"]["h_streef"])
 
         bassinNRL_params = BassinParameters()
         bassinNRL_h_max = float(gebied_params_raw["bassinNRL"]["h_max"])
@@ -165,14 +176,16 @@ class GebiedParameters:
         if pomp_params.h_uit >= pomp_params.h_aan:
             raise ValueError("h_uit_pomp moet kleiner dan h_aan_pomp zijn.")
 
-        opp_tot += onverhard_params.opp + glasNRL_params.opp + glasRL_params.opp + openwater_params.opp
+        gebied_opp = onverhard_params.opp + glasNRL_params.opp + glasRL_params.opp + openwater_params.opp
+        if gebied_opp <= 0.0:
+            raise ValueError("De totale oppervlakte van een gebied moet groter dan 0 zijn")
+        opp_tot += gebied_opp
         gemaal_cap = gebied_params_raw["stuw_pomp"]["gemaal_cap"]
         self.set_overig(bassinNRL_params,
                         bassinRL_params,
                         glasNRL_params,
                         glasRL_params,
                         pomp_params,
-                        opp_tot,
                         gemaal_cap)
         bassinRL_params.set_q_klep_max(gebied_params_raw["bassinRL"]["dh_klep_max"] * bassinRL_params.opp)
         self.onverhard_params = onverhard_params
@@ -183,6 +196,18 @@ class GebiedParameters:
         self.bassinRL_params = bassinRL_params
         self.pomp_params = pomp_params
         self.c_stuw = gebied_params_raw["stuw_pomp"]["c_stuw"]
+        self.opp_tot = gebied_opp
+
+        begin_waterruimte_mm = sum(self.bereken_waterruimte_mm(
+            bassinNRL_params.h_init,
+            bassinRL_params.h_init,
+            openwater_params.h_init,
+        ))
+        if begin_waterruimte_mm > 100.0 + 1e-9:
+            raise ValueError(
+                f"Totale waterruimte bij aanvang is {begin_waterruimte_mm:.2f} mm; "
+                "dit mag maximaal 100 mm zijn"
+            )
         return opp_tot
 
     def __str__(self):
@@ -206,7 +231,7 @@ class Parameters:
     def __init__(self):
         self.n_gebieden: int = 0
         self.gebied_params: list[GebiedParameters] = []
-        self.verbindingen_map: dict[int, list[tuple[int, float | int, float | int]]] = {}
+        self.verbindingen_map: dict[int, list[tuple[int, float | int]]] = {}
         self.overschrijdingsmarge: float | int | None = None
         self.rainleveler_aan: bool = False
         self.rainleveler_respons: float | int = 0.0
@@ -245,19 +270,17 @@ class Parameters:
             raise ValueError("rainleveler_respons mag niet negatief zijn")
 
         # verbindingen tussen gebieden
-        verbindingen_map: dict[int, list[tuple[int, float | int, float | int]]] = {
+        verbindingen_map: dict[int, list[tuple[int, float | int]]] = {
             gebied_id: [] for gebied_id in range(len(gebied_params))
         }
         for verbinding in config["verbindingen"]:
             van = verbinding["van"]
             naar = verbinding["naar"]
-            verbindingen_map[van].append((naar, verbinding["b_stuw"], verbinding["h_kruin_stuw"]))
-        # zet hoogte en breedte van stuwen in self.stuw_params
+            verbindingen_map[van].append((naar, verbinding["b_stuw"]))
+        # zet breedte van stuwen in self.stuw_params
         for gebied_id, params in enumerate(gebied_params):
-            stuwen = [
-                (breedte, kruinhoogte) for _, breedte, kruinhoogte in verbindingen_map[gebied_id]
-            ]
-            params.stel_stuwen_in(stuwen)
+            stuwbreedtes = [breedte for _, breedte in verbindingen_map[gebied_id]]
+            params.stel_stuwen_in(stuwbreedtes)
             if params.pomp_params is not None:
                 gemaal_cap_m_per_u = params.pomp_params.gemaal_cap / 1000 / 24
                 q_max = opp_tot * gemaal_cap_m_per_u
@@ -266,9 +289,10 @@ class Parameters:
 
     def __str__(self):
         verbindingen_tekst = "\n\t\t".join(
-            f"{van} -> {naar} (stuw_b {stuw.b:.1f}, stuw_h_kruin {stuw.h_kruin:.1f})"
+            f"{van} -> {naar} (stuw_b {stuw.b:.1f}, "
+            f"stuw_h_kruin {self.gebied_params[van].openwater_params.h_streef:.1f})"
             for van, verbindingen in self.verbindingen_map.items()
-            for (naar, _, _), stuw in zip(verbindingen, self.gebied_params[van].stuw_params)
+            for (naar, _), stuw in zip(verbindingen, self.gebied_params[van].stuw_params)
         )
 
         regels = [
@@ -314,3 +338,16 @@ class GebiedToestand:
         self.bassinRL: BassinToestand = BassinToestand(params.bassinRL_params.h_init, is_RL=True)
         self.pomp_aan: bool = False
         self.vm_resterend = 0.0
+        self.waterruimte_kolommen: tuple[str, str, str] = ("bassinNRL", "bassinRL", "openwater")
+        self.waterruimte_matrix: list[list[float]] = [params.bereken_waterruimte_mm(
+            self.bassinNRL.h,
+            self.bassinRL.h,
+            self.openwater.h,
+        )]
+
+    def voeg_waterruimte_toe(self, params: GebiedParameters) -> None:
+        self.waterruimte_matrix.append(params.bereken_waterruimte_mm(
+            self.bassinNRL.h,
+            self.bassinRL.h,
+            self.openwater.h,
+        ))

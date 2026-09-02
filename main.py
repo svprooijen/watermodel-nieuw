@@ -99,7 +99,8 @@ def tijdstap(idx: int,
         # uitstroom naar minstens 1 ander gebied
         if verbindingen:
             # * 3600 want geeft debiet in m^3/s
-            debieten_per_stuw = [stuw.c * stuw.b * max(openwater.h - stuw.h_kruin, 0.0) ** 1.5 * 3600.0
+            kruinhoogte = gebied_params.openwater_params.h_streef
+            debieten_per_stuw = [stuw.c * stuw.b * max(openwater.h - kruinhoogte, 0.0) ** 1.5 * 3600.0
                                  for stuw in gebied_params.stuw_params]
             q_stuw_berekend = sum(debieten_per_stuw)
             q_max_beschikbaar = beschikbaar_volume / dt_u
@@ -107,7 +108,7 @@ def tijdstap(idx: int,
             schaal = (q_stuw / q_stuw_berekend if q_stuw_berekend > 0.0 else 0.0)
 
             # voeg uitstroom stuwen toe aan open water andere gebieden
-            for (naar, _, _), debiet_per_stuw in zip(
+            for (naar, _), debiet_per_stuw in zip(
                 verbindingen,
                 debieten_per_stuw,
                 strict=True,
@@ -142,6 +143,7 @@ def tijdstap(idx: int,
         openwater.q_in_arr.append(q_in)
         openwater.q_uit_arr.append(q_uit)
         openwater.h_arr.append(openwater.h)
+        toestand.voeg_waterruimte_toe(gebied_params)
 
 
 def plot_resultaten(
@@ -150,7 +152,10 @@ def plot_resultaten(
     gebied_toestanden: list[GebiedToestand],
     grafiektype: str,
 ) -> None:
-    fig, ax = plt.subplots(figsize=(11, 6))
+    fig = plt.figure(figsize=(13, 9))
+    raster = fig.add_gridspec(2, 1, height_ratios=(2.2, 1.0), hspace=0.35)
+    ax = fig.add_subplot(raster[0])
+    ax_ruimte = fig.add_subplot(raster[1])
 
     if grafiektype == "waterstand":
         waarden_per_gebied = [toestand.openwater.h_arr for toestand in gebied_toestanden]
@@ -189,7 +194,87 @@ def plot_resultaten(
     lijnen, lijn_labels = ax.get_legend_handles_labels()
     balken, balk_labels = ax_neerslag.get_legend_handles_labels()
     ax.legend(lijnen + balken, lijn_labels + balk_labels)
-    fig.tight_layout()
+
+    # Iedere balk is altijd 100 mm hoog. De drie soorten beschikbare
+    # waterruimte worden gestapeld boven de zwarte overige ruimte.
+    gebied_ids = list(range(len(gebied_toestanden)))
+    balk_breedte = 0.72
+    zwart_balken = ax_ruimte.bar(
+        gebied_ids, [100.0] * len(gebied_ids), width=balk_breedte,
+        color="black", label="Overig",
+    )
+    openwater_balken = ax_ruimte.bar(
+        gebied_ids, [0.0] * len(gebied_ids), width=balk_breedte,
+        color="#1976d2", label="Open water",
+    )
+    rl_balken = ax_ruimte.bar(
+        gebied_ids, [0.0] * len(gebied_ids), width=balk_breedte,
+        color="#d9d9d9", edgecolor="#777777", label="RL-bassin",
+    )
+    nrl_balken = ax_ruimte.bar(
+        gebied_ids, [0.0] * len(gebied_ids), width=balk_breedte,
+        color="#555555", label="NRL-bassin",
+    )
+    ax_ruimte.set_ylim(0.0, 100.0)
+    ax_ruimte.set_xticks(gebied_ids, [f"Gebied {gebied_id}" for gebied_id in gebied_ids])
+    ax_ruimte.set_ylabel("Waterruimte (mm)")
+    ax_ruimte.set_title("Beschikbare waterruimte per gebied")
+    ax_ruimte.grid(axis="y", alpha=0.25)
+    ax_ruimte.legend(ncols=4, loc="upper center", bbox_to_anchor=(0.5, -0.18))
+
+    tijdlijn = ax.axvline(tijd_u_arr[0], color="tab:red", linewidth=2.0, zorder=10)
+    tijdtekst = ax.text(
+        0.01, 0.98, "", transform=ax.transAxes, va="top", ha="left",
+        color="tab:red", bbox={"facecolor": "white", "alpha": 0.8, "edgecolor": "none"},
+    )
+
+    def werk_waterruimte_bij(tijd_idx: int) -> None:
+        for gebied_id, toestand in enumerate(gebied_toestanden):
+            nrl_mm, rl_mm, openwater_mm = toestand.waterruimte_matrix[tijd_idx]
+            totale_ruimte_mm = nrl_mm + rl_mm + openwater_mm
+            overig_mm = max(0.0, 100.0 - totale_ruimte_mm)
+
+            zwart_balken[gebied_id].set_height(overig_mm)
+            openwater_balken[gebied_id].set_y(overig_mm)
+            openwater_balken[gebied_id].set_height(openwater_mm)
+            rl_balken[gebied_id].set_y(overig_mm + openwater_mm)
+            rl_balken[gebied_id].set_height(rl_mm)
+            nrl_balken[gebied_id].set_y(overig_mm + openwater_mm + rl_mm)
+            nrl_balken[gebied_id].set_height(nrl_mm)
+
+        gekozen_tijd_u = tijd_u_arr[tijd_idx]
+        tijdlijn.set_xdata([gekozen_tijd_u, gekozen_tijd_u])
+        tijdtekst.set_text(f"Tijd: {gekozen_tijd_u:.2f} uur")
+        fig.canvas.draw_idle()
+
+    def dichtstbijzijnde_tijd_idx(tijd_u: float) -> int:
+        return min(range(len(tijd_u_arr)), key=lambda idx: abs(tijd_u_arr[idx] - tijd_u))
+
+    slepen = {"actief": False}
+    interactieve_assen = (ax, ax_neerslag)
+
+    def selecteer_tijd(event) -> None:
+        if event.inaxes in interactieve_assen and event.xdata is not None:
+            werk_waterruimte_bij(dichtstbijzijnde_tijd_idx(event.xdata))
+
+    def bij_muis_indrukken(event) -> None:
+        if event.inaxes in interactieve_assen and event.button == 1:
+            slepen["actief"] = True
+            selecteer_tijd(event)
+
+    def bij_muis_bewegen(event) -> None:
+        if slepen["actief"]:
+            selecteer_tijd(event)
+
+    def bij_muis_loslaten(_event) -> None:
+        slepen["actief"] = False
+
+    fig.canvas.mpl_connect("button_press_event", bij_muis_indrukken)
+    fig.canvas.mpl_connect("motion_notify_event", bij_muis_bewegen)
+    fig.canvas.mpl_connect("button_release_event", bij_muis_loslaten)
+
+    werk_waterruimte_bij(0)
+    # fig.tight_layout()
     plt.show()
 
 
@@ -319,9 +404,8 @@ def main():
                     gebied_params.pomp_params.h_aan -= 0.1
                     gebied_params.pomp_params.h_uit -= 0.1
 
-                if params.voormalen_aan == 2:
-                    for stuw_params in gebied_params.stuw_params:
-                        stuw_params.h_kruin -= 0.1
+                if params.voormalen_aan == 2 and gebied_params.stuw_params:
+                    gebied_params.openwater_params.h_streef -= 0.1
             voormalen_uitgevoerd = True
 
         tijdstap(
