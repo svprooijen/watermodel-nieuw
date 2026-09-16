@@ -20,9 +20,14 @@ class Waterbalk:
 @dataclass
 class GebiedsgraafTekening:
     figuur: plt.Figure
+    hoofd_as: Axes
     graaf: nx.DiGraph
     posities: dict[int, tuple[float, float]]
     waterbalken: dict[int, Waterbalk]
+    knoop_assen: dict[int, Axes]
+    pijlen: list[FancyArrowPatch]
+    knoop_breedte: float
+    knoop_hoogte: float
 
 
 def maak_gebiedsgraaf(params: Parameters) -> nx.DiGraph:
@@ -134,7 +139,8 @@ def teken_gerichte_pijlen(
     posities: dict[int, tuple[float, float]],
     box_breedte: float,
     box_hoogte: float,
-) -> None:
+) -> list[FancyArrowPatch]:
+    pijlen: list[FancyArrowPatch] = []
     for van, naar in graaf.edges:
         bron_midden = posities[van]
         doel_midden = posities[naar]
@@ -156,6 +162,116 @@ def teken_gerichte_pijlen(
             zorder=1,
         )
         ax.add_patch(pijl)
+        pijlen.append(pijl)
+    return pijlen
+
+
+def herteken_pijlen(tekening: GebiedsgraafTekening) -> None:
+    """Verwijder de oude pijlen en teken ze opnieuw bij de actuele knoopposities."""
+    for pijl in tekening.pijlen:
+        pijl.remove()
+    tekening.pijlen = teken_gerichte_pijlen(
+        tekening.hoofd_as,
+        tekening.graaf,
+        tekening.posities,
+        tekening.knoop_breedte,
+        tekening.knoop_hoogte,
+    )
+
+
+def verplaats_knoop(
+    tekening: GebiedsgraafTekening,
+    gebied_id: int,
+    x: float,
+    y: float,
+) -> None:
+    """Verplaats één gebiedsbox en laat de aangesloten pijlen volgen."""
+    halve_breedte = tekening.knoop_breedte / 2.0
+    halve_hoogte = tekening.knoop_hoogte / 2.0
+    x = min(max(x, halve_breedte), 1.0 - halve_breedte)
+    y = min(max(y, halve_hoogte), 1.0 - halve_hoogte)
+    tekening.posities[gebied_id] = (x, y)
+
+    # set_position verwacht figuurcoördinaten; de knoopposities zijn relatief
+    # aan de hoofd-as van de graaf.
+    links_onder_px = tekening.hoofd_as.transAxes.transform(
+        (x - halve_breedte, y - halve_hoogte)
+    )
+    rechts_boven_px = tekening.hoofd_as.transAxes.transform(
+        (x + halve_breedte, y + halve_hoogte)
+    )
+    links_onder_fig = tekening.figuur.transFigure.inverted().transform(links_onder_px)
+    rechts_boven_fig = tekening.figuur.transFigure.inverted().transform(rechts_boven_px)
+    knoop_as = tekening.knoop_assen[gebied_id]
+    knoop_as.set_axes_locator(None)
+    knoop_as.set_position([
+        links_onder_fig[0],
+        links_onder_fig[1],
+        rechts_boven_fig[0] - links_onder_fig[0],
+        rechts_boven_fig[1] - links_onder_fig[1],
+    ])
+
+    herteken_pijlen(tekening)
+    tekening.figuur.canvas.draw_idle()
+
+
+def maak_knopen_sleepbaar(tekening: GebiedsgraafTekening) -> None:
+    """Koppel muisevents waarmee gebiedsboxen binnen de graaf versleept worden."""
+    sleepstatus = {
+        "gebied_id": None,
+        "offset_x": 0.0,
+        "offset_y": 0.0,
+    }
+
+    def bij_muis_indrukken(event) -> None:
+        if event.button != 1 or event.x is None or event.y is None:
+            return
+        gebied_id = next(
+            (
+                kandidaat_id
+                for kandidaat_id, knoop_as in tekening.knoop_assen.items()
+                if knoop_as.bbox.contains(event.x, event.y)
+            ),
+            None,
+        )
+        if gebied_id is None:
+            return
+        sleepstatus["gebied_id"] = gebied_id
+        muis_x, muis_y = tekening.hoofd_as.transAxes.inverted().transform(
+            (event.x, event.y)
+        )
+        knoop_x, knoop_y = tekening.posities[gebied_id]
+        sleepstatus["offset_x"] = float(muis_x - knoop_x)
+        sleepstatus["offset_y"] = float(muis_y - knoop_y)
+        tekening.knoop_assen[gebied_id].patch.set_edgecolor("tab:red")
+        tekening.knoop_assen[gebied_id].patch.set_linewidth(2.0)
+        tekening.figuur.canvas.draw_idle()
+
+    def bij_muis_bewegen(event) -> None:
+        gebied_id = sleepstatus["gebied_id"]
+        if gebied_id is None or event.x is None or event.y is None:
+            return
+        x, y = tekening.hoofd_as.transAxes.inverted().transform((event.x, event.y))
+        verplaats_knoop(
+            tekening,
+            gebied_id,
+            float(x - sleepstatus["offset_x"]),
+            float(y - sleepstatus["offset_y"]),
+        )
+
+    def bij_muis_loslaten(_event) -> None:
+        gebied_id = sleepstatus["gebied_id"]
+        if gebied_id is None:
+            return
+        knoop_as = tekening.knoop_assen[gebied_id]
+        knoop_as.patch.set_edgecolor("black")
+        knoop_as.patch.set_linewidth(0.8)
+        sleepstatus["gebied_id"] = None
+        tekening.figuur.canvas.draw_idle()
+
+    tekening.figuur.canvas.mpl_connect("button_press_event", bij_muis_indrukken)
+    tekening.figuur.canvas.mpl_connect("motion_notify_event", bij_muis_bewegen)
+    tekening.figuur.canvas.mpl_connect("button_release_event", bij_muis_loslaten)
 
 
 def teken_gebiedsgraaf(
@@ -190,7 +306,7 @@ def teken_gebiedsgraaf(
     ax.set_title("Beschikbare waterruimte en verbindingen per gebied", pad=20)
     ax.axis("off")
 
-    teken_gerichte_pijlen(
+    pijlen = teken_gerichte_pijlen(
         ax,
         graaf,
         posities,
@@ -199,6 +315,7 @@ def teken_gebiedsgraaf(
     )
 
     waterbalken: dict[int, Waterbalk] = {}
+    knoop_assen: dict[int, Axes] = {}
 
     for gebied_id, (x, y) in posities.items():
         knoop_ax = ax.inset_axes(
@@ -216,6 +333,7 @@ def teken_gebiedsgraaf(
         knoop_ax.set_xticks([])
         knoop_ax.set_yticks([])
         knoop_ax.set_facecolor("white")
+        knoop_assen[gebied_id] = knoop_ax
 
         pomp_tekst = " (pomp)" if graaf.nodes[gebied_id]["heeft_pomp"] else ""
         knoop_ax.set_title(f"Gebied {gebied_id}{pomp_tekst}", fontsize=9, pad=3)
@@ -247,11 +365,17 @@ def teken_gebiedsgraaf(
 
     tekening = GebiedsgraafTekening(
         figuur=figuur,
+        hoofd_as=ax,
         graaf=graaf,
         posities=posities,
         waterbalken=waterbalken,
+        knoop_assen=knoop_assen,
+        pijlen=pijlen,
+        knoop_breedte=knoop_breedte,
+        knoop_hoogte=knoop_hoogte,
     )
     werk_waterbalken_bij(tekening, gebied_toestanden, tijd_idx, balkhoogte)
+    maak_knopen_sleepbaar(tekening)
     return tekening
 
 
