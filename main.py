@@ -2,6 +2,7 @@ import sys
 import matplotlib.pyplot as plt
 import pandas as pd
 
+from graaf import teken_gebiedsgraaf, werk_waterbalken_bij as werk_graaf_waterbalken_bij
 from parameters import (
     BassinParameters,
     BassinToestand,
@@ -149,11 +150,13 @@ def tijdstap(idx: int,
 def plot_resultaten(
     tijd_u_arr: list[float],
     neerslag_mm_arr: list[float],
+    params: Parameters,
     gebied_toestanden: list[GebiedToestand],
     grafiektype: str,
+    balkhoogte: float,
 ) -> None:
-    fig = plt.figure(figsize=(13, 9))
-    raster = fig.add_gridspec(2, 1, height_ratios=(2.2, 1.0), hspace=0.35)
+    fig = plt.figure(figsize=(14, 11))
+    raster = fig.add_gridspec(2, 1, height_ratios=(1.2, 1.5), hspace=0.30)
     ax = fig.add_subplot(raster[0])
     ax_ruimte = fig.add_subplot(raster[1])
 
@@ -195,32 +198,13 @@ def plot_resultaten(
     balken, balk_labels = ax_neerslag.get_legend_handles_labels()
     ax.legend(lijnen + balken, lijn_labels + balk_labels)
 
-    # Iedere balk is altijd 100 mm hoog. De drie soorten beschikbare
-    # waterruimte worden gestapeld boven de zwarte overige ruimte.
-    gebied_ids = list(range(len(gebied_toestanden)))
-    balk_breedte = 0.72
-    zwart_balken = ax_ruimte.bar(
-        gebied_ids, [100.0] * len(gebied_ids), width=balk_breedte,
-        color="black", label="Overig",
+    gebiedsgraaf_tekening = teken_gebiedsgraaf(
+        params=params,
+        gebied_toestanden=gebied_toestanden,
+        balkhoogte=balkhoogte,
+        tijd_idx=0,
+        ax=ax_ruimte,
     )
-    openwater_balken = ax_ruimte.bar(
-        gebied_ids, [0.0] * len(gebied_ids), width=balk_breedte,
-        color="#1976d2", label="Open water",
-    )
-    rl_balken = ax_ruimte.bar(
-        gebied_ids, [0.0] * len(gebied_ids), width=balk_breedte,
-        color="#d9d9d9", edgecolor="#777777", label="RL-bassin",
-    )
-    nrl_balken = ax_ruimte.bar(
-        gebied_ids, [0.0] * len(gebied_ids), width=balk_breedte,
-        color="#555555", label="NRL-bassin",
-    )
-    ax_ruimte.set_ylim(0.0, 100.0)
-    ax_ruimte.set_xticks(gebied_ids, [f"Gebied {gebied_id}" for gebied_id in gebied_ids])
-    ax_ruimte.set_ylabel("Waterruimte (mm)")
-    ax_ruimte.set_title("Beschikbare waterruimte per gebied")
-    ax_ruimte.grid(axis="y", alpha=0.25)
-    ax_ruimte.legend(ncols=4, loc="upper center", bbox_to_anchor=(0.5, -0.18))
 
     tijdlijn = ax.axvline(tijd_u_arr[0], color="tab:red", linewidth=2.0, zorder=10)
     tijdtekst = ax.text(
@@ -229,18 +213,12 @@ def plot_resultaten(
     )
 
     def werk_waterruimte_bij(tijd_idx: int) -> None:
-        for gebied_id, toestand in enumerate(gebied_toestanden):
-            nrl_mm, rl_mm, openwater_mm = toestand.waterruimte_matrix[tijd_idx]
-            totale_ruimte_mm = nrl_mm + rl_mm + openwater_mm
-            overig_mm = max(0.0, 100.0 - totale_ruimte_mm)
-
-            zwart_balken[gebied_id].set_height(overig_mm)
-            openwater_balken[gebied_id].set_y(overig_mm)
-            openwater_balken[gebied_id].set_height(openwater_mm)
-            rl_balken[gebied_id].set_y(overig_mm + openwater_mm)
-            rl_balken[gebied_id].set_height(rl_mm)
-            nrl_balken[gebied_id].set_y(overig_mm + openwater_mm + rl_mm)
-            nrl_balken[gebied_id].set_height(nrl_mm)
+        werk_graaf_waterbalken_bij(
+            gebiedsgraaf_tekening,
+            gebied_toestanden,
+            tijd_idx,
+            balkhoogte,
+        )
 
         gekozen_tijd_u = tijd_u_arr[tijd_idx]
         tijdlijn.set_xdata([gekozen_tijd_u, gekozen_tijd_u])
@@ -360,6 +338,7 @@ def main():
     neerslag_mm_arr = df["rain_mm"].astype(float).tolist()
 
     grafiektype = sys.argv[3].lower()
+    balkhoogte = 70.0  # mm
 
     gebied_toestanden = [GebiedToestand(gp) for gp in params.gebied_params]
     totale_bui_m = sum(neerslag_mm_arr[1:]) / 1000.0
@@ -426,8 +405,10 @@ def main():
     plot_resultaten(
         tijd_u_arr,
         neerslag_mm_arr,
+        params,
         gebied_toestanden,
         grafiektype,
+        balkhoogte,
     )
 
 
