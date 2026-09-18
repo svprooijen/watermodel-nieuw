@@ -32,13 +32,13 @@ extra:
   overschrijdingsmarge: 0.3 # m
   rainleveler_aan: 0 # 0-uit, 1-aan
   rainleveler_respons: 12 # u
-  voormalen_aan: 0 # 0-uit, 1-verlaag peilen, 2-verlaag ook kruinhoogtes
+  voormalen_aan: 2 # 0-uit, 1-verlaag peilen, 2-verlaag ook kruinhoogtes
   voormalen_respons: 12 # u
 
 # Overschrijf default parameters in specifieke gebieden, - {} voor default gebied
 gebieden:
   - openwater:
-      h_init: 1.9
+      h_init: 2.1
       h_streef: 2.1
   - openwater:
       h_init: 1.4

@@ -50,6 +50,7 @@ class StuwParameters:
     def __init__(self):
         self.b: float | int = 0 # breedte
         self.c: float | int | None = None
+        self.h_kruin: float | int = 0
     def set_b(self, b):
         self.b = b
     def set_c(self, c):
@@ -95,6 +96,7 @@ class GebiedParameters:
         self.pomp_params: PompParameters | None = None
         self.c_stuw: float | int | None = None
         self.opp_tot: float | int = 0
+        self.overschrijdingsmarge: float | int = 0
 
     def stel_stuwen_in(self, stuwbreedtes: list[float | int]):
         self.stuw_params = []
@@ -104,6 +106,7 @@ class GebiedParameters:
                 stuw_params = StuwParameters()
                 stuw_params.set_b(breedte)
                 stuw_params.set_c(self.c_stuw)
+                stuw_params.h_kruin = self.openwater_params.h_streef
                 self.stuw_params.append(stuw_params)
 
     def bereken_waterruimte_mm(self, bassinNRL_h: float | int,
@@ -111,7 +114,9 @@ class GebiedParameters:
                                      openwater_h: float | int,) -> list[float]:
         nrl_ruimte_mm = max(0.0, self.bassinNRL_params.h_max - bassinNRL_h) * 1000.0
         rl_ruimte_mm = max(0.0, self.bassinRL_params.h_max - bassinRL_h) * 1000.0
-        openwater_ruimte_mm = max(0.0, self.openwater_params.h_streef - openwater_h) * 1000.0
+        openwater_ruimte_mm = max(
+            0.0, self.openwater_params.h_streef + self.overschrijdingsmarge - openwater_h
+        ) * 1000.0
         return [
             nrl_ruimte_mm * self.glasNRL_params.opp / self.opp_tot,
             rl_ruimte_mm * self.glasRL_params.opp / self.opp_tot,
@@ -242,6 +247,8 @@ class Parameters:
         with open(bestandsnaam) as f:
             config = yaml.safe_load(f)
 
+        self.overschrijdingsmarge = config["extra"]["overschrijdingsmarge"]
+
         # gebied parameters
         gebied_params: List[GebiedParameters] = []
         defaults = config["defaults"]
@@ -252,6 +259,7 @@ class Parameters:
                 params_raw[categorie].update(wijzigingen)
 
             params = GebiedParameters()
+            params.overschrijdingsmarge = self.overschrijdingsmarge
             opp_tot = params.converteer_ruw_naar_object(params_raw, opp_tot)
             gebied_params.append(params)
 
@@ -259,7 +267,6 @@ class Parameters:
         self.n_gebieden = len(gebied_params)
 
         # extra
-        self.overschrijdingsmarge = config["extra"]["overschrijdingsmarge"]
         self.rainleveler_aan = bool(config["extra"]["rainleveler_aan"])
         self.rainleveler_respons = float(config["extra"]["rainleveler_respons"])
         self.voormalen_aan = int(config["extra"]["voormalen_aan"])
@@ -290,7 +297,7 @@ class Parameters:
     def __str__(self):
         verbindingen_tekst = "\n\t\t".join(
             f"{van} -> {naar} (stuw_b {stuw.b:.1f}, "
-            f"stuw_h_kruin {self.gebied_params[van].openwater_params.h_streef:.1f})"
+            f"stuw_h_kruin {stuw.h_kruin:.1f})"
             for van, verbindingen in self.verbindingen_map.items()
             for (naar, _), stuw in zip(verbindingen, self.gebied_params[van].stuw_params)
         )

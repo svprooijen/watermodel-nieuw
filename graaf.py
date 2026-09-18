@@ -338,12 +338,12 @@ def teken_gebiedsgraaf(
         pomp_tekst = " (pomp)" if graaf.nodes[gebied_id]["heeft_pomp"] else ""
         knoop_ax.set_title(f"Gebied {gebied_id}{pomp_tekst}", fontsize=9, pad=3)
 
-        overig = knoop_ax.bar(0, balkhoogte, width=0.72, color="black")[0]
-        openwater = knoop_ax.bar(0, 0.0, width=0.72, color="#1976d2")[0]
+        overig = knoop_ax.bar(0, balkhoogte, width=0.72, color="#ADADC7")[0]
+        openwater = knoop_ax.bar(0, 0.0, width=0.72, color="#5B89EB")[0]
         bassin_rl = knoop_ax.bar(
-            0, 0.0, width=0.72, color="#d9d9d9", edgecolor="#777777"
+            0, 0.0, width=0.72, color="#BB96F2"
         )[0]
-        bassin_nrl = knoop_ax.bar(0, 0.0, width=0.72, color="#555555")[0]
+        bassin_nrl = knoop_ax.bar(0, 0.0, width=0.72, color="#EBCC50")[0]
         waterbalken[gebied_id] = Waterbalk(
             overig=overig,
             openwater=openwater,
@@ -353,10 +353,10 @@ def teken_gebiedsgraaf(
 
     ax.legend(
         handles=[
-            Patch(facecolor="black", label="Overig"),
-            Patch(facecolor="#1976d2", label="Open water"),
-            Patch(facecolor="#d9d9d9", edgecolor="#777777", label="RL-bassin"),
-            Patch(facecolor="#555555", label="NRL-bassin"),
+            Patch(facecolor="#ADADC7", label="Overig"),
+            Patch(facecolor="#5B89EB", label="Open water"),
+            Patch(facecolor="#BB96F2", label="RL-bassin"),
+            Patch(facecolor="#EBCC50", label="NRL-bassin"),
         ],
         ncols=4,
         loc="lower center",

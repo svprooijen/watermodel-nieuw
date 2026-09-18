@@ -100,8 +100,7 @@ def tijdstap(idx: int,
         # uitstroom naar minstens 1 ander gebied
         if verbindingen:
             # * 3600 want geeft debiet in m^3/s
-            kruinhoogte = gebied_params.openwater_params.h_streef
-            debieten_per_stuw = [stuw.c * stuw.b * max(openwater.h - kruinhoogte, 0.0) ** 1.5 * 3600.0
+            debieten_per_stuw = [stuw.c * stuw.b * max(openwater.h - stuw.h_kruin, 0.0) ** 1.5 * 3600.0
                                  for stuw in gebied_params.stuw_params]
             q_stuw_berekend = sum(debieten_per_stuw)
             q_max_beschikbaar = beschikbaar_volume / dt_u
@@ -384,7 +383,8 @@ def main():
                     gebied_params.pomp_params.h_uit -= 0.1
 
                 if params.voormalen_aan == 2 and gebied_params.stuw_params:
-                    gebied_params.openwater_params.h_streef -= 0.1
+                    for stuw in gebied_params.stuw_params:
+                        stuw.h_kruin -= 0.1
             voormalen_uitgevoerd = True
 
         tijdstap(
