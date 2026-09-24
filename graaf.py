@@ -4,6 +4,7 @@ import argparse
 import matplotlib.pyplot as plt
 import networkx as nx
 from matplotlib.axes import Axes
+from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch, Patch, Rectangle
 
 from parameters import GebiedToestand, Parameters
@@ -15,6 +16,8 @@ class Waterbalk:
     openwater: Rectangle
     bassin_rl: Rectangle
     bassin_nrl: Rectangle
+    bassin_rl_vol: Line2D
+    bassin_nrl_vol: Line2D
 
 
 @dataclass
@@ -344,11 +347,21 @@ def teken_gebiedsgraaf(
             0, 0.0, width=0.72, color="#BB96F2"
         )[0]
         bassin_nrl = knoop_ax.bar(0, 0.0, width=0.72, color="#EBCC50")[0]
+        bassin_rl_vol, = knoop_ax.plot(
+            [-0.36, 0.36], [0.0, 0.0], color="red", linewidth=2,
+            visible=False, zorder=5, clip_on=False,
+        )
+        bassin_nrl_vol, = knoop_ax.plot(
+            [-0.36, 0.36], [0.0, 0.0], color="red", linewidth=2,
+            visible=False, zorder=5, clip_on=False,
+        )
         waterbalken[gebied_id] = Waterbalk(
             overig=overig,
             openwater=openwater,
             bassin_rl=bassin_rl,
             bassin_nrl=bassin_nrl,
+            bassin_rl_vol=bassin_rl_vol,
+            bassin_nrl_vol=bassin_nrl_vol,
         )
 
     ax.legend(
@@ -357,6 +370,7 @@ def teken_gebiedsgraaf(
             Patch(facecolor="#5B89EB", label="Open water"),
             Patch(facecolor="#BB96F2", label="RL-bassin"),
             Patch(facecolor="#EBCC50", label="NRL-bassin"),
+            Line2D([], [], color="red", linewidth=2, label="Geen bassinruimte"),
         ],
         ncols=4,
         loc="lower center",
@@ -407,6 +421,14 @@ def werk_waterbalken_bij(
         balk.bassin_rl.set_height(rl_mm)
         balk.bassin_nrl.set_y(overig_mm + openwater_mm + rl_mm)
         balk.bassin_nrl.set_height(nrl_mm)
+
+        # Laat ook een bassin zonder resterende ruimte zichtbaar blijven.
+        for ruimte_mm, bassin, lijn in (
+            (rl_mm, balk.bassin_rl, balk.bassin_rl_vol),
+            (nrl_mm, balk.bassin_nrl, balk.bassin_nrl_vol),
+        ):
+            lijn.set_ydata([bassin.get_y(), bassin.get_y()])
+            lijn.set_visible(ruimte_mm <= 1e-9)
 
     tekening.figuur.canvas.draw_idle()
 

@@ -1,6 +1,8 @@
 import sys
 import matplotlib.pyplot as plt
 import pandas as pd
+from math import floor, isfinite
+from pathlib import Path
 
 from graaf import teken_gebiedsgraaf, werk_waterbalken_bij as werk_graaf_waterbalken_bij
 from parameters import (
@@ -153,6 +155,7 @@ def plot_resultaten(
     gebied_toestanden: list[GebiedToestand],
     grafiektype: str,
     balkhoogte: float,
+    foto_periode_minuten: float | None = None,
 ) -> None:
     fig = plt.figure(figsize=(14, 11))
     raster = fig.add_gridspec(2, 1, height_ratios=(1.2, 1.5), hspace=0.30)
@@ -221,7 +224,7 @@ def plot_resultaten(
 
         gekozen_tijd_u = tijd_u_arr[tijd_idx]
         tijdlijn.set_xdata([gekozen_tijd_u, gekozen_tijd_u])
-        tijdtekst.set_text(f"Tijd: {gekozen_tijd_u:.2f} uur")
+        tijdtekst.set_text(f"Tijd: {floor(gekozen_tijd_u)}:{(gekozen_tijd_u-floor(gekozen_tijd_u))*60:.0f} uur")
         fig.canvas.draw_idle()
 
     def dichtstbijzijnde_tijd_idx(tijd_u: float) -> int:
@@ -250,6 +253,23 @@ def plot_resultaten(
     fig.canvas.mpl_connect("motion_notify_event", bij_muis_bewegen)
     fig.canvas.mpl_connect("button_release_event", bij_muis_loslaten)
 
+    if foto_periode_minuten is not None:
+        fotos_map = Path(__file__).resolve().parent / "fotos"
+        fotos_map.mkdir(exist_ok=True)
+        duur_minuten = (tijd_u_arr[-1] - tijd_u_arr[0]) * 60.0
+        foto_indices = {0, len(tijd_u_arr) - 1}
+        # Gebruik de dichtstbijzijnde beschikbare tijdstap bij elk fotomoment.
+        for nummer in range(1, floor(duur_minuten / foto_periode_minuten) + 1):
+            minuten = nummer * foto_periode_minuten
+            foto_indices.add(dichtstbijzijnde_tijd_idx(tijd_u_arr[0] + minuten / 60.0))
+
+        for tijd_idx in sorted(foto_indices):
+            werk_waterruimte_bij(tijd_idx)
+            verstreken_minuten = (tijd_u_arr[tijd_idx] - tijd_u_arr[0]) * 60.0
+            bestandsnaam = f"{grafiektype}_{verstreken_minuten:09.3f}min.png"
+            fig.savefig(fotos_map / bestandsnaam, dpi=150, bbox_inches="tight")
+
+        print(f"{len(foto_indices)} PNG's opgeslagen in {fotos_map}")
     werk_waterruimte_bij(0)
     # fig.tight_layout()
     plt.show()
@@ -319,9 +339,18 @@ def toon_waterbalans(
 
 
 def main():
-    if len(sys.argv) < 4:
-        print("Gebruik: python3 main.py <gebieden.in> <regen.csv> <grafiektype>")
+    if len(sys.argv) not in (4, 6) or (len(sys.argv) == 6 and sys.argv[4] != "fotos"):
+        print("Gebruik: python3 main.py <gebieden.in> <regen.csv> <grafiektype> [fotos <minuten>]")
         sys.exit(1)
+
+    foto_periode_minuten = None
+    if len(sys.argv) == 6:
+        try:
+            foto_periode_minuten = float(sys.argv[5])
+        except ValueError:
+            sys.exit("De fotoperiode moet een positief getal in minuten zijn.")
+        if not isfinite(foto_periode_minuten) or foto_periode_minuten <= 0:
+            sys.exit("De fotoperiode moet een positief, eindig getal in minuten zijn.")
 
     # parameters inlezen
     params: Parameters = Parameters()
@@ -409,6 +438,7 @@ def main():
         gebied_toestanden,
         grafiektype,
         balkhoogte,
+        foto_periode_minuten,
     )
 
 
