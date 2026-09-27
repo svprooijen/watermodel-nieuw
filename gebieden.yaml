@@ -40,16 +40,15 @@ gebieden:
   - openwater:
       h_init: 2.1
       h_streef: 2.1
-  - {}
-  - bassinRL:
-      h_init: 25
-      dh_klep_max: 0.01
-    stuw_pomp:
-      gemaal_cap: 15
   - openwater:
-      opp: 180000
-    glasRL:
-      opp: 300000
+      h_init: 1.4
+      h_streef: 1.4
+  - openwater:
+      h_init: 0.7
+      h_streef: 0.7
+  - openwater:
+      h_init: 1.0
+      h_streef: 1.0
   - openwater:
       h_init: 1.7
       h_streef: 1.7
