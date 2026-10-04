@@ -30,7 +30,7 @@ Indien er wel behoefte is aan andere parameters, neem dan precies de structuur o
 Tot slot staat er onderaan nog een kopje ```verbindingen:```, waar de doorstroming van gebied naar gebied wordt gespecificeerd. Per element in de lijst (wederom aangegeven met een ```-```) moeten de twee gebieden waartussen water stroomt staan naast ```van:``` en ```naar:```, en de breedte van de stuw die deze twee gebieden verbindt naast ```b_stuw:```.
 #### Voorbeelden
 Zie onderstaand vier gebieden met aangepaste parameters. Gebied 1 (tweede in de lijst) behoudt de default-parameters.
-```bash
+```
 gebieden:
   - openwater:
       h_init: 2.1

@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import argparse
+from math import isclose
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -16,8 +17,6 @@ class Waterbalk:
     openwater: Rectangle
     bassin_rl: Rectangle
     bassin_nrl: Rectangle
-    bassin_rl_vol: Line2D
-    bassin_nrl_vol: Line2D
 
 
 @dataclass
@@ -31,6 +30,54 @@ class GebiedsgraafTekening:
     pijlen: list[FancyArrowPatch]
     knoop_breedte: float
     knoop_hoogte: float
+    params: Parameters
+    lampen: dict[int, tuple[Line2D, Line2D, Line2D]]
+    overstroming_tellers: list[int]
+
+
+def werk_overstromingslampen_bij(
+    tekening: GebiedsgraafTekening,
+    gebied_toestanden: list[GebiedToestand],
+    tijd_idx: int,
+) -> None:
+    # Reconstrueer de eerste overschrijdingen tot de gekozen tijd, ook bij
+    # terugslepen of het overslaan van tijdstappen.
+    rangen: dict[tuple[int, int], int] = {}
+    tellers = [0, 0, 0]
+    for stap in range(tijd_idx + 1):
+        for gebied_id, toestand in enumerate(gebied_toestanden):
+            params = tekening.params.gebied_params[gebied_id]
+            overstroomd = (
+                params.bassinNRL_params.opp > 0
+                and (
+                    toestand.bassinNRL.h_arr[stap] >= params.bassinNRL_params.h_max
+                    or isclose(toestand.bassinNRL.h_arr[stap],
+                               params.bassinNRL_params.h_max, rel_tol=0.0, abs_tol=1e-12)
+                ),
+                params.bassinRL_params.opp > 0
+                and (
+                    toestand.bassinRL.h_arr[stap] >= params.bassinRL_params.h_max
+                    or isclose(toestand.bassinRL.h_arr[stap],
+                               params.bassinRL_params.h_max, rel_tol=0.0, abs_tol=1e-12)
+                ),
+                params.openwater_params.opp > 0
+                and toestand.openwater.h_arr[stap]
+                > params.openwater_params.h_streef + params.overschrijdingsmarge,
+            )
+            for component, is_overstroomd in enumerate(overstroomd):
+                sleutel = (gebied_id, component)
+                if is_overstroomd and sleutel not in rangen:
+                    rangen[sleutel] = tellers[component]
+                    tellers[component] += 1
+
+    tekening.overstroming_tellers[:] = tellers
+    for gebied_id, lampen in tekening.lampen.items():
+        for component, lamp in enumerate(lampen):
+            rang = rangen.get((gebied_id, component))
+            kleur = "#360000" if rang is None else (
+                1.0, rang / max(1, len(gebied_toestanden) - 1), 0.0
+            )
+            lamp.set_markerfacecolor(kleur)
 
 
 def maak_gebiedsgraaf(params: Parameters) -> nx.DiGraph:
@@ -302,7 +349,8 @@ def teken_gebiedsgraaf(
         for x, _ in posities.values()
     }
     drukste_kolom = max(aantal_per_kolom.values(), default=1)
-    knoop_hoogte = min(0.25, 0.76 / drukste_kolom)
+    # Reserveer boven elke balk ruimte voor de lampen en hun labels.
+    knoop_hoogte = min(0.17, 0.76 / (1.5 * drukste_kolom))
 
     ax.set_xlim(0.0, 1.0)
     ax.set_ylim(0.0, 1.0)
@@ -319,6 +367,7 @@ def teken_gebiedsgraaf(
 
     waterbalken: dict[int, Waterbalk] = {}
     knoop_assen: dict[int, Axes] = {}
+    lampen: dict[int, tuple[Line2D, Line2D, Line2D]] = {}
 
     for gebied_id, (x, y) in posities.items():
         knoop_ax = ax.inset_axes(
@@ -339,7 +388,26 @@ def teken_gebiedsgraaf(
         knoop_assen[gebied_id] = knoop_ax
 
         pomp_tekst = " (pomp)" if graaf.nodes[gebied_id]["heeft_pomp"] else ""
-        knoop_ax.set_title(f"Gebied {gebied_id}{pomp_tekst}", fontsize=9, pad=3)
+        knoop_ax.annotate(
+            f"Gebied {gebied_id}{pomp_tekst}",
+            xy=(0.5, 1.24), xycoords="axes fraction",
+            xytext=(0, 10), textcoords="offset points",
+            ha="center", va="bottom", fontsize=9, annotation_clip=False,
+        )
+        gebied_lampen = []
+        for lamp_x, label in zip((0.2, 0.5, 0.8), ("NRL", "RL", "OW")):
+            knoop_ax.text(
+                lamp_x, 1.24, label, transform=knoop_ax.transAxes,
+                ha="center", va="bottom", fontsize=7, clip_on=False,
+            )
+            lamp, = knoop_ax.plot(
+                [lamp_x], [1.12], transform=knoop_ax.transAxes,
+                marker="o", markersize=10, linestyle="none",
+                markerfacecolor="#360000", markeredgecolor="#200000",
+                clip_on=False, zorder=6,
+            )
+            gebied_lampen.append(lamp)
+        lampen[gebied_id] = tuple(gebied_lampen)
 
         overig = knoop_ax.bar(0, balkhoogte, width=0.72, color="#ADADC7")[0]
         openwater = knoop_ax.bar(0, 0.0, width=0.72, color="#5B89EB")[0]
@@ -347,21 +415,11 @@ def teken_gebiedsgraaf(
             0, 0.0, width=0.72, color="#BB96F2"
         )[0]
         bassin_nrl = knoop_ax.bar(0, 0.0, width=0.72, color="#EBCC50")[0]
-        bassin_rl_vol, = knoop_ax.plot(
-            [-0.36, 0.36], [0.0, 0.0], color="red", linewidth=2,
-            visible=False, zorder=5, clip_on=False,
-        )
-        bassin_nrl_vol, = knoop_ax.plot(
-            [-0.36, 0.36], [0.0, 0.0], color="red", linewidth=2,
-            visible=False, zorder=5, clip_on=False,
-        )
         waterbalken[gebied_id] = Waterbalk(
             overig=overig,
             openwater=openwater,
             bassin_rl=bassin_rl,
             bassin_nrl=bassin_nrl,
-            bassin_rl_vol=bassin_rl_vol,
-            bassin_nrl_vol=bassin_nrl_vol,
         )
 
     ax.legend(
@@ -370,7 +428,6 @@ def teken_gebiedsgraaf(
             Patch(facecolor="#5B89EB", label="Open water"),
             Patch(facecolor="#BB96F2", label="RL-bassin"),
             Patch(facecolor="#EBCC50", label="NRL-bassin"),
-            Line2D([], [], color="red", linewidth=2, label="Geen bassinruimte"),
         ],
         ncols=4,
         loc="lower center",
@@ -387,6 +444,9 @@ def teken_gebiedsgraaf(
         pijlen=pijlen,
         knoop_breedte=knoop_breedte,
         knoop_hoogte=knoop_hoogte,
+        params=params,
+        lampen=lampen,
+        overstroming_tellers=[0, 0, 0],
     )
     werk_waterbalken_bij(tekening, gebied_toestanden, tijd_idx, balkhoogte)
     maak_knopen_sleepbaar(tekening)
@@ -422,14 +482,7 @@ def werk_waterbalken_bij(
         balk.bassin_nrl.set_y(overig_mm + openwater_mm + rl_mm)
         balk.bassin_nrl.set_height(nrl_mm)
 
-        # Laat ook een bassin zonder resterende ruimte zichtbaar blijven.
-        for ruimte_mm, bassin, lijn in (
-            (rl_mm, balk.bassin_rl, balk.bassin_rl_vol),
-            (nrl_mm, balk.bassin_nrl, balk.bassin_nrl_vol),
-        ):
-            lijn.set_ydata([bassin.get_y(), bassin.get_y()])
-            lijn.set_visible(ruimte_mm <= 1e-9)
-
+    werk_overstromingslampen_bij(tekening, gebied_toestanden, tijd_idx)
     tekening.figuur.canvas.draw_idle()
 
 
