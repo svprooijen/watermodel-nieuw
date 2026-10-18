@@ -359,7 +359,7 @@ def main():
 
     # regen inlezen
     regen_bestand: str = sys.argv[2]
-    df = pd.read_csv(regen_bestand)
+    df = pd.read_csv(regen_bestand, sep=None, engine="python")
     if "rain_mm" not in df.columns or "time_h" not in df.columns:
         raise ValueError("CSV moet een kolom 'time_h' en 'rain_mm' bevatten.")
     tijd_u_arr = df["time_h"].astype(float).tolist()
