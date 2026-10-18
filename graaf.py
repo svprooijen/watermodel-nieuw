@@ -7,6 +7,7 @@ import networkx as nx
 from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch, Patch, Rectangle
+from matplotlib.text import Text
 
 from parameters import GebiedToestand, Parameters
 
@@ -33,6 +34,7 @@ class GebiedsgraafTekening:
     params: Parameters
     lampen: dict[int, tuple[Line2D, Line2D, Line2D]]
     overstroming_tellers: list[int]
+    lamp_nummers: dict[int, tuple[Text, Text, Text]]
 
 
 def werk_overstromingslampen_bij(
@@ -74,10 +76,14 @@ def werk_overstromingslampen_bij(
     for gebied_id, lampen in tekening.lampen.items():
         for component, lamp in enumerate(lampen):
             rang = rangen.get((gebied_id, component))
-            kleur = "#360000" if rang is None else (
-                1.0, rang / max(1, len(gebied_toestanden) - 1), 0.0
+            aan_kleur = ("#EBCC50", "#BB96F2", "#FF0000")[component]
+            kleur = aan_kleur if rang is not None else tuple(
+                int(aan_kleur[i:i + 2], 16) / 255.0 * 0.22
+                for i in (1, 3, 5)
             )
             lamp.set_markerfacecolor(kleur)
+            nummer = tekening.lamp_nummers[gebied_id][component]
+            nummer.set_text("" if rang is None else str(rang + 1))
 
 
 def maak_gebiedsgraaf(params: Parameters) -> nx.DiGraph:
@@ -100,32 +106,88 @@ def bepaal_knoopposities(graaf: nx.DiGraph) -> dict[int, tuple[float, float]]:
         return {}
 
     if nx.is_directed_acyclic_graph(graaf):
-        # Deel knopen in op hun grootste afstand tot een benedenstrooms eindpunt.
-        # Daardoor staat bijvoorbeeld een gebied dat rechtstreeks naar de pomp
-        # stroomt ook daadwerkelijk in de kolom direct voor die pomp.
-        afstand_tot_eind: dict[int, int] = {}
-        for gebied_id in reversed(list(nx.topological_sort(graaf))):
-            opvolgers = list(graaf.successors(gebied_id))
-            afstand_tot_eind[gebied_id] = (
-                1 + max(afstand_tot_eind[opvolger] for opvolger in opvolgers)
-                if opvolgers
-                else 0
-            )
-
-        grootste_afstand = max(afstand_tot_eind.values())
-        generaties: list[list[int]] = [
-            sorted(
-                gebied_id
-                for gebied_id, afstand in afstand_tot_eind.items()
-                if grootste_afstand - afstand == generatie_id
-            )
-            for generatie_id in range(grootste_afstand + 1)
+        # Elke knoop krijgt een eigen x-positie. Alle verbindingen blijven zo
+        # naar rechts wijzen, zonder knopen vlak voor de pomp op te stapelen.
+        volgorde = list(nx.lexicographical_topological_sort(graaf))
+        kanten = list(graaf.edges)
+        knopenparen = [
+            (a, b) for rang, a in enumerate(volgorde) for b in volgorde[rang + 1:]
         ]
-        ruwe_posities: dict[int, tuple[float, float]] = {}
-        for generatie_id, generatie in enumerate(generaties):
-            midden = (len(generatie) - 1) / 2
-            for rij, gebied_id in enumerate(generatie):
-                ruwe_posities[gebied_id] = (float(generatie_id), midden - rij)
+        kantenparen = [
+            (a, b, c, d)
+            for rang, (a, b) in enumerate(kanten)
+            for c, d in kanten[rang + 1:]
+            if len({a, b, c, d}) == 4
+        ]
+
+        def kwaliteit(posities: dict[int, tuple[float, float]]) -> tuple:
+            def orientatie(a, b, c):
+                return ((b[0] - a[0]) * (c[1] - a[1])
+                        - (b[1] - a[1]) * (c[0] - a[0]))
+
+            # Rechte verbindingslijnen benaderen de licht gebogen pijlen.
+            kruisingen = 0
+            for a, b, c, d in kantenparen:
+                pa, pb, pc, pd = (posities[k] for k in (a, b, c, d))
+                kruisingen += (
+                    orientatie(pa, pb, pc) * orientatie(pa, pb, pd) < -1e-12
+                    and orientatie(pc, pd, pa) * orientatie(pc, pd, pb) < -1e-12
+                )
+
+            # Vermijd ook pijlen door een andere gebiedsbox.
+            door_boxen = 0
+            lengte = 0.0
+            for a, b in kanten:
+                xa, ya = posities[a]
+                xb, yb = posities[b]
+                lengte += (xb - xa) ** 2 + (yb - ya) ** 2
+                for k, (x, y) in posities.items():
+                    if k not in (a, b) and xa < x < xb:
+                        pijl_y = ya + (yb - ya) * (x - xa) / (xb - xa)
+                        door_boxen += abs(pijl_y - y) < 0.18
+
+            overlap = sum(
+                max(0.0, 1 - abs(posities[a][0] - posities[b][0]) / 0.10)
+                * max(0.0, 1 - abs(posities[a][1] - posities[b][1]) / 0.45)
+                for a, b in knopenparen
+            )
+            spreiding = sum(
+                1 / (0.01 + ((posities[a][0] - posities[b][0]) / 0.12) ** 2
+                     + ((posities[a][1] - posities[b][1]) / 0.50) ** 2)
+                for a, b in knopenparen
+            )
+            return kruisingen, overlap, door_boxen, lengte + 0.1 * spreiding
+
+        # Meerdere reproduceerbare beginstanden voorkomen dat één lokale
+        # oplossing (zoals een zigzag) de uiteindelijke indeling bepaalt.
+        beste_posities = None
+        beste_score = None
+        kandidaten = [0.12 + 0.76 * stap / 20 for stap in range(21)]
+        for seed in (42, 43, 44, 45):
+            startposities = nx.spring_layout(graaf, seed=seed)
+            posities = normaliseer_knoopposities({
+                gebied_id: (float(rang), float(startposities[gebied_id][1]))
+                for rang, gebied_id in enumerate(volgorde)
+            })
+            for ronde in range(8):
+                gewijzigd = False
+                for gebied_id in (volgorde if ronde % 2 == 0 else volgorde[::-1]):
+                    x, oude_y = posities[gebied_id]
+                    beste_y = oude_y
+                    score = kwaliteit(posities)
+                    for y in kandidaten:
+                        posities[gebied_id] = (x, y)
+                        nieuwe_score = kwaliteit(posities)
+                        if nieuwe_score < score:
+                            beste_y, score = y, nieuwe_score
+                    posities[gebied_id] = (x, beste_y)
+                    gewijzigd |= beste_y != oude_y
+                if not gewijzigd:
+                    break
+            score = kwaliteit(posities)
+            if beste_score is None or score < beste_score:
+                beste_posities, beste_score = posities, score
+        return beste_posities
     else:
         # Ook bij een kring blijven de posities door de vaste seed reproduceerbaar.
         spring_posities = nx.spring_layout(graaf, seed=42)
@@ -229,6 +291,15 @@ def herteken_pijlen(tekening: GebiedsgraafTekening) -> None:
     )
 
 
+def verticale_knoopgrenzen(ax: Axes, knoop_hoogte: float) -> tuple[float, float]:
+    """Houd ook de gebiedsnaam en lampen binnen het vlak onder de titel."""
+    # Gebiedsnaam: y=1.24 van de box, 10 punten offset, 9 punten tekst.
+    tekst_en_marge = 26 * ax.figure.dpi / 72 / ax.get_window_extent().height
+    ondergrens = knoop_hoogte / 2 + 0.02
+    bovengrens = 1.0 - 0.74 * knoop_hoogte - tekst_en_marge
+    return ondergrens, max(ondergrens, bovengrens)
+
+
 def verplaats_knoop(
     tekening: GebiedsgraafTekening,
     gebied_id: int,
@@ -239,7 +310,10 @@ def verplaats_knoop(
     halve_breedte = tekening.knoop_breedte / 2.0
     halve_hoogte = tekening.knoop_hoogte / 2.0
     x = min(max(x, halve_breedte), 1.0 - halve_breedte)
-    y = min(max(y, halve_hoogte), 1.0 - halve_hoogte)
+    ondergrens, bovengrens = verticale_knoopgrenzen(
+        tekening.hoofd_as, tekening.knoop_hoogte
+    )
+    y = min(max(y, ondergrens), bovengrens)
     tekening.posities[gebied_id] = (x, y)
 
     # set_position verwacht figuurcoördinaten; de knoopposities zijn relatief
@@ -343,14 +417,29 @@ def teken_gebiedsgraaf(
 
     graaf = maak_gebiedsgraaf(params)
     posities = bepaal_knoopposities(graaf)
-    knoop_breedte = 0.10
+    knoop_breedte = 0.05
     aantal_per_kolom = {
         x: sum(1 for knoop_x, _ in posities.values() if knoop_x == x)
         for x, _ in posities.values()
     }
     drukste_kolom = max(aantal_per_kolom.values(), default=1)
     # Reserveer boven elke balk ruimte voor de lampen en hun labels.
-    knoop_hoogte = min(0.17, 0.76 / (1.5 * drukste_kolom))
+    knoop_hoogte = 2 * min(0.17, 0.76 / (1.5 * drukste_kolom))
+
+    # Pas alleen de posities aan; de schermhoogte van de balken blijft gelijk.
+    ondergrens, bovengrens = verticale_knoopgrenzen(ax, knoop_hoogte)
+    if posities:
+        laagste_y = min(y for _, y in posities.values())
+        hoogste_y = max(y for _, y in posities.values())
+        posities = {
+            gebied_id: (
+                x,
+                ondergrens + (y - laagste_y) / (hoogste_y - laagste_y)
+                * (bovengrens - ondergrens)
+                if hoogste_y > laagste_y else (ondergrens + bovengrens) / 2,
+            )
+            for gebied_id, (x, y) in posities.items()
+        }
 
     ax.set_xlim(0.0, 1.0)
     ax.set_ylim(0.0, 1.0)
@@ -368,6 +457,7 @@ def teken_gebiedsgraaf(
     waterbalken: dict[int, Waterbalk] = {}
     knoop_assen: dict[int, Axes] = {}
     lampen: dict[int, tuple[Line2D, Line2D, Line2D]] = {}
+    lamp_nummers: dict[int, tuple[Text, Text, Text]] = {}
 
     for gebied_id, (x, y) in posities.items():
         knoop_ax = ax.inset_axes(
@@ -380,7 +470,7 @@ def teken_gebiedsgraaf(
             transform=ax.transAxes,
             zorder=3,
         )
-        knoop_ax.set_xlim(-0.6, 0.6)
+        knoop_ax.set_xlim(-0.5, 0.5)
         knoop_ax.set_ylim(0.0, balkhoogte)
         knoop_ax.set_xticks([])
         knoop_ax.set_yticks([])
@@ -395,6 +485,7 @@ def teken_gebiedsgraaf(
             ha="center", va="bottom", fontsize=9, annotation_clip=False,
         )
         gebied_lampen = []
+        gebied_nummers = []
         for lamp_x, label in zip((0.2, 0.5, 0.8), ("NRL", "RL", "OW")):
             knoop_ax.text(
                 lamp_x, 1.24, label, transform=knoop_ax.transAxes,
@@ -402,19 +493,25 @@ def teken_gebiedsgraaf(
             )
             lamp, = knoop_ax.plot(
                 [lamp_x], [1.12], transform=knoop_ax.transAxes,
-                marker="o", markersize=10, linestyle="none",
+                marker="o", markersize=14, linestyle="none",
                 markerfacecolor="#360000", markeredgecolor="#200000",
                 clip_on=False, zorder=6,
             )
             gebied_lampen.append(lamp)
+            nummer = knoop_ax.text(
+                lamp_x, 1.12, "", transform=knoop_ax.transAxes,
+                ha="center", va="center", fontsize=7, fontweight="bold",
+                color="white" if label == "OW" else "black",
+                clip_on=False, zorder=7,
+            )
+            gebied_nummers.append(nummer)
         lampen[gebied_id] = tuple(gebied_lampen)
+        lamp_nummers[gebied_id] = tuple(gebied_nummers)
 
-        overig = knoop_ax.bar(0, balkhoogte, width=0.72, color="#ADADC7")[0]
-        openwater = knoop_ax.bar(0, 0.0, width=0.72, color="#5B89EB")[0]
-        bassin_rl = knoop_ax.bar(
-            0, 0.0, width=0.72, color="#BB96F2"
-        )[0]
-        bassin_nrl = knoop_ax.bar(0, 0.0, width=0.72, color="#EBCC50")[0]
+        overig = knoop_ax.bar(0, balkhoogte, width=1, color="#ADADC7")[0]
+        openwater = knoop_ax.bar(0, 0.0, width=1, color="#5B89EB")[0]
+        bassin_rl = knoop_ax.bar(0, 0.0, width=1, color="#BB96F2")[0]
+        bassin_nrl = knoop_ax.bar(0, 0.0, width=1, color="#EBCC50")[0]
         waterbalken[gebied_id] = Waterbalk(
             overig=overig,
             openwater=openwater,
@@ -447,6 +544,7 @@ def teken_gebiedsgraaf(
         params=params,
         lampen=lampen,
         overstroming_tellers=[0, 0, 0],
+        lamp_nummers=lamp_nummers,
     )
     werk_waterbalken_bij(tekening, gebied_toestanden, tijd_idx, balkhoogte)
     maak_knopen_sleepbaar(tekening)

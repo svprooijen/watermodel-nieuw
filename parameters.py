@@ -197,6 +197,9 @@ class GebiedParameters:
         self.glasNRL_params = glasNRL_params
         self.glasRL_params = glasRL_params
         self.openwater_params = openwater_params
+        self.overschrijdingsmarge = float(gebied_params_raw["openwater"]["overschrijdingsmarge"])
+        if self.overschrijdingsmarge < 0:
+            raise ValueError("overschrijdingsmarge mag niet negatief zijn")
         self.bassinNRL_params = bassinNRL_params
         self.bassinRL_params = bassinRL_params
         self.pomp_params = pomp_params
@@ -217,6 +220,7 @@ class GebiedParameters:
 
     def __str__(self):
         regels = [
+            f"  overschrijdingsmarge: {self.overschrijdingsmarge:.2f} m",
             f"  onverhard:\t{self.onverhard_params}",
             f"  glas NRL:\t{self.glasNRL_params}",
             f"  glas RL:\t{self.glasRL_params}",
@@ -237,7 +241,6 @@ class Parameters:
         self.n_gebieden: int = 0
         self.gebied_params: list[GebiedParameters] = []
         self.verbindingen_map: dict[int, list[tuple[int, float | int]]] = {}
-        self.overschrijdingsmarge: float | int | None = None
         self.rainleveler_aan: bool = False
         self.rainleveler_respons: float | int = 0.0
         self.voormalen_aan: int = 0
@@ -246,8 +249,6 @@ class Parameters:
     def lees_in(self, bestandsnaam):
         with open(bestandsnaam) as f:
             config = yaml.safe_load(f)
-
-        self.overschrijdingsmarge = config["extra"]["overschrijdingsmarge"]
 
         # gebied parameters
         gebied_params: List[GebiedParameters] = []
@@ -259,7 +260,6 @@ class Parameters:
                 params_raw[categorie].update(wijzigingen)
 
             params = GebiedParameters()
-            params.overschrijdingsmarge = self.overschrijdingsmarge
             opp_tot = params.converteer_ruw_naar_object(params_raw, opp_tot)
             gebied_params.append(params)
 
@@ -306,7 +306,6 @@ class Parameters:
             "",
             "Parameters",
             f"Aantal gebieden: {self.n_gebieden}",
-            f"Overschrijdingsmarge: {"None" if self.overschrijdingsmarge is None else f"{self.overschrijdingsmarge:.2f}"}",
             f"Verbindingen:\t{verbindingen_tekst}",
         ]
 

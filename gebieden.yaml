@@ -15,6 +15,7 @@ defaults:
     opp: 50000 # m²
     h_init: 0.0 # m
     h_streef: 0.0 # m; tevens de kruinhoogte van alle stuwen in het gebied
+    overschrijdingsmarge: 0.3 # m boven h_streef
   bassinNRL:
     h_init: 100 # mm aan beginruimte
     h_max: 0.1 # m
@@ -29,7 +30,6 @@ defaults:
     gemaal_cap: 19 # mm/dag
 
 extra:
-  overschrijdingsmarge: 0.3 # m
   rainleveler_aan: 0 # 0-uit, 1-aan
   rainleveler_respons: 12 # u
   voormalen_aan: 1 # 0-uit, 1-verlaag peilen, 2-verlaag ook kruinhoogtes
@@ -43,6 +43,7 @@ gebieden:
   - openwater:
       h_init: 1.4
       h_streef: 1.4
+      overschrijdingsmarge: 0.1
     bassinNRL:
       h_init: 50
     bassinRL:
@@ -57,16 +58,26 @@ gebieden:
   - openwater:
       h_init: 1.0
       h_streef: 1.0
+    bassinNRL:
+      h_init: 20
+    bassinRL:
+      h_init: 20
   - openwater:
       h_init: 1.7
       h_streef: 1.7
+    bassinNRL:
+      h_init: 60
+    bassinRL:
+      h_init: 10
   - openwater:
       h_init: 1.0
       h_streef: 1.0
   - openwater:
+      overschrijdingsmarge: 0.2
       h_init: 0.7
       h_streef: 0.7
   - openwater:
+      overschrijdingsmarge: 0.5
       h_init: 0.0
       h_streef: 0.0
 
